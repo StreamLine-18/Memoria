@@ -45,36 +45,59 @@ Built for the **limit-hopping** workflow: hit your limit at 14:30, open a differ
 
 ## How it works
 
-```
-        Your AI tool sessions
-  Claude Code · Codex · Gemini · Copilot · Antigravity · opencode · VS Code · Cursor · Windsurf
-        │                              │
-        │ jsonl / sqlite / logs        │ /recall · /mcp  (MCP stdio + HTTP bridge)
-        ▼                              ▼
-   WATCHER (real-time)           MCP SERVER
-        │                              ▲
-        ▼                              │
-   EXTRACTION — tiered, never blocked  │
-   Tier 2  OpenAI-compatible (opt-in)  │
-   Tier 1  Ollama (local LLM)          │
-   Tier 0  Heuristics (no model!)      │
-        ▼                              │
-   ┌───────────────────────────────────────┐
-   │   LOCAL DATABASE (SQLite)             │
-   │   memories + graph + embeddings       │──── context injected into
-   └──────────────────┬────────────────────┘     AGENTS.md · CLAUDE.md · GEMINI.md
-        ▼                              │
-   DASHBOARD (Electron tray app)       │
+```mermaid
+flowchart TB
+  subgraph S["1. AI tool sessions (9 sources)"]
+    S1["Claude Code · Codex · Gemini CLI · Copilot · Antigravity<br/>opencode · VS Code · Cursor · Windsurf"]
+  end
+
+  subgraph C["2. Capture & triggers"]
+    W["Watcher<br/>real-time ingest (jsonl / sqlite / logs)"]
+    P["Pre-limit trigger<br/>usage-limit snapshot → immediate resume path"]
+  end
+
+  subgraph E["3. Extraction (tiered, never blocked)"]
+    direction LR
+    T0["Tier 0<br/>Heuristics<br/>(no model)"]
+    T1["Tier 1<br/>Ollama<br/>(local LLM)"]
+    T2["Tier 2<br/>OpenAI-compatible<br/>(opt-in)"]
+  end
+
+  subgraph K["4. Local core — ~/.memoria (SQLite)"]
+    DB[("Memories · tasks · graph<br/>FTS5 + embeddings + links")]
+    RES["Resume engine<br/>hot path on idle (~4 min) / pre-limit"]
+  end
+
+  subgraph O["5. Consumers & outputs"]
+    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 clients · 7 tools"]
+    CTX["Context injection<br/>AGENTS.md · CLAUDE.md · GEMINI.md"]
+    UI["Dashboard<br/>Electron tray · 9 views"]
+    NT["Webhooks / notifications<br/>Discord · Telegram · generic"]
+  end
+
+  subgraph X["Optional: encrypted sync (same user, multi-device)"]
+    SYNC[".memsync bundles (E2E AES-256-GCM)<br/>manual export/import or shared folder"]
+  end
+
+  S1 --> W
+  S1 -. "limit event" .-> P
+  W --> E
+  P --> RES
+  E --> DB
+  DB <--> RES
+  RES --> CTX
+  DB <--> MCP
+  DB --> UI
+  DB --> NT
+  DB <-. "encrypted ops (no embeddings/secrets/transcripts)" .-> SYNC
 ```
 
-1. Work as usual in any AI tool.
-2. Memoria captures new sessions in real time and stores them locally.
-3. The active intelligence tier extracts memories — indexed by keyword + embeddings + graph links.
-4. When a session goes idle (~4 minutes = session ended), the **resume engine** kicks in: the
-   newest session is extracted first, and a **SESSION RESUME** block is injected into the context
-   files your tools actually read.
-5. Open the dashboard anytime — overview, memories, task board, graph, handoffs.
-6. (Optional) Sync the same memory library across your machines with end-to-end encrypted bundles.
+1. **Capture** — work in any AI tool; Memoria watches sessions in real time (jsonl/sqlite/logs) and, on a reported usage limit, takes a deterministic work snapshot.
+2. **Extract** — the active tier (heuristics, Ollama, or OpenAI-compatible) turns transcripts into memories (facts, decisions, tasks, fixes), indexed by FTS5 + embeddings + graph links.
+3. **Store locally** — everything lives in a local SQLite brain (`~/.memoria`); embeddings/dialects are never mixed across models.
+4. **Resume** — when a session goes idle (~4 min) or pre-limit fires, the resume engine extracts the newest session first and injects an idempotent **SESSION RESUME** block into `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`.
+5. **Consume** — any of the 12 MCP clients can `recall`/`remember`/curate context via stdio or the HTTP bridge (`/mcp`), while the dashboard and opt-in webhooks surface the same state.
+6. **Sync (optional)** — replicate the library across your devices with end-to-end encrypted `.memsync` bundles (manual or shared folder); embeddings, secrets, settings, transcripts, and local paths never sync.
 
 ## Highlights
 

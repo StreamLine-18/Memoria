@@ -45,16 +45,59 @@ sudah tahu Anda sedang mengerjakan apa.
 
 ## Cara kerja
 
-1. Bekerja seperti biasa di tool AI mana pun — transkrip tertangkap real-time.
-2. Mesin ekstraksi bertingkat mengubahnya menjadi memori (fakta, keputusan, tugas, error-fix),
-   diindeks dengan keyword (FTS5) + embedding + graph.
-3. Saat sesi diam ±4 menit, **resume engine** mengekstrak sesi terbaru lebih dulu dan menyuntikkan
-   blok **SESSION RESUME** (tugas terbuka, keputusan terkunci, branch, file yang berubah) ke
-   `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`.
-4. Saat tool AI-mu sendiri melaporkan limit, **trigger pre-limit** menjalankan pipeline yang sama
-   SEKARANG — plus snapshot kerja deterministik (file, command, error, git) disimpan sebagai memori.
-5. Buka tool lain — langsung nyambung.
-5. (Opsional) Sinkronkan pustaka memori yang sama ke perangkat lain dengan bundle terenkripsi E2E.
+```mermaid
+flowchart TB
+  subgraph S["1. Sesi AI tool (9 sumber)"]
+    S1["Claude Code · Codex · Gemini CLI · Copilot · Antigravity<br/>opencode · VS Code · Cursor · Windsurf"]
+  end
+
+  subgraph C["2. Capture & trigger"]
+    W["Watcher<br/>ingest real-time (jsonl / sqlite / logs)"]
+    P["Trigger pre-limit<br/>snapshot saat limit → jalur resume langsung"]
+  end
+
+  subgraph E["3. Ekstraksi (bertingkat, tak pernah terblokir)"]
+    direction LR
+    T0["Tier 0<br/>Heuristik<br/>(tanpa model)"]
+    T1["Tier 1<br/>Ollama<br/>(LLM lokal)"]
+    T2["Tier 2<br/>OpenAI-compatible<br/>(opt-in)"]
+  end
+
+  subgraph K["4. Inti lokal — ~/.memoria (SQLite)"]
+    DB[("Memori · tugas · graph<br/>FTS5 + embedding + links")]
+    RES["Resume engine<br/>hot path saat idle (~4 menit) / pre-limit"]
+  end
+
+  subgraph O["5. Konsumen & output"]
+    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 klien · 7 tools"]
+    CTX["Injeksi konteks<br/>AGENTS.md · CLAUDE.md · GEMINI.md"]
+    UI["Dashboard<br/>Electron tray · 9 view"]
+    NT["Webhook / notifikasi<br/>Discord · Telegram · generik"]
+  end
+
+  subgraph X["Opsional: sync terenkripsi (satu user, banyak perangkat)"]
+    SYNC["Bundle .memsync (E2E AES-256-GCM)<br/>ekspor/impor manual atau folder bersama"]
+  end
+
+  S1 --> W
+  S1 -. "event limit" .-> P
+  W --> E
+  P --> RES
+  E --> DB
+  DB <--> RES
+  RES --> CTX
+  DB <--> MCP
+  DB --> UI
+  DB --> NT
+  DB <-. "ops terenkripsi (tanpa embedding/secret/transkrip)" .-> SYNC
+```
+
+1. **Capture** — bekerja di tool AI mana pun; Memoria mengawasi sesi real-time (jsonl/sqlite/logs) dan, saat limit dilaporkan, mengambil snapshot kerja deterministik.
+2. **Ekstraksi** — tier aktif (heuristik, Ollama, atau OpenAI-compatible) mengubah transkrip jadi memori (fakta, keputusan, tugas, error-fix), terindeks FTS5 + embedding + graph.
+3. **Simpan lokal** — semua ada di SQLite lokal (`~/.memoria`); embedding/dialek tidak pernah dicampur antar model.
+4. **Resume** — saat sesi idle (~4 menit) atau pre-limit, resume engine mengekstrak sesi terbaru lebih dulu dan menyuntikkan blok **SESSION RESUME** (idempoten) ke `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`.
+5. **Konsumsi** — 12 klien MCP bisa `recall`/`remember`/mengkurasi konteks via stdio atau HTTP bridge (`/mcp`), sementara dashboard dan webhook opt-in menampilkan state yang sama.
+6. **Sync (opsional)** — replikasi pustaka antar perangkat dengan bundle `.memsync` terenkripsi E2E (manual/folder bersama); embedding, secret, settings, transkrip, dan path lokal tidak pernah ikut.
 
 ## Fitur utama
 
@@ -166,6 +209,47 @@ node dist/engine/index.js sync folder status
 node dist/engine/index.js sync conflicts
 ```
 
+## Resume engine — limit-hopping
+
+Fitur inti: limit habis di tengah tugas lalu pindah tool, tool baru harus sudah paham konteksmu.
+
+Saat aktivitas transkrip hening (~4 menit = sesi berakhir) — atau saat **trigger pre-limit**
+mendeteksi laporan limit dari tool AI — Memoria menjalankan hot path: **scan → ekstrak sesi
+terbaru dulu → injeksi**. Snapshot kerja deterministik (file disentuh, command, error, pesan
+terakhir, branch/dirty files git) disimpan sebagai memori, lalu setiap file konteks proyek
+mendapat blok idempoten bertanda:
+
+```markdown
+## SESSION RESUME
+> claude · 14:32 · branch: feat/auth
+
+**Open tasks:**
+- [ ] finish the refresh-token endpoint in routes/api.ts
+
+**Locked decisions (do not repeat):**
+- JWT access tokens, 15 min — not sessions
+
+**Dirty files (git):** src/auth/middleware.ts, src/auth/routes.ts
+
+_Continue the work above — do not re-litigate locked decisions._
+```
+
+Disuntikkan ke **AGENTS.md** (Codex/opencode), **CLAUDE.md** (Claude Code) dan **GEMINI.md**
+(Gemini CLI) — masing-masing bisa di-toggle di Settings — plus prompt lanjutan siap-paste
+untuk tool yang tidak membaca file konteks.
+
+## Tiered intelligence
+
+| Tier | Engine | Butuh | Ekstraksi | Embedding |
+|---|---|---|---|---|
+| 2 | OpenAI-compatible | opt-in eksplisit + endpoint | ✓ kelas LLM | ✓ kelas model |
+| 1 | Ollama | terpasang lokal | ✓ kelas LLM | ✓ kelas model |
+| 0 | **Heuristik** (default) | **tidak ada** | rule-based → antrian tinjau | hash lokal (256-dim) |
+
+- Mode `Auto`: pakai Ollama saat berjalan **dan** model tersedia, selain itu heuristik. Tidak pernah menyentuh cloud.
+- Perubahan engine langsung berlaku — tanpa restart.
+- Dialek embedding tidak pernah dicampur: search, dedupe, dan graph tidak membandingkan vektor antar model.
+
 ## Sync terenkripsi (opsional)
 
 Sinkronkan pustaka memori antar perangkat (user yang sama) dengan bundle end-to-end encrypted:
@@ -194,7 +278,6 @@ Sembilan view, English atau Bahasa Indonesia:
 - **Tasks** — papan janji tugas dari sesi AI
 - **Graph** — koneksi memori 3D, interaksi ala Obsidian
 - **Integrations** — 12 target MCP, registrasi satu klik
-- **Settings** — dua panel: sumber data, engine, perilaku, data/backup, notifikasi, dan sync
 - **Settings** — dua panel: sumber data, engine, perilaku, data/backup, notifikasi, dan sync
 
 Global: `Ctrl/⌘ + Shift + M` quick note · `Ctrl/⌘ + Shift + Space` memory palette (bisa diubah di Settings).
