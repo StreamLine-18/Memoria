@@ -893,8 +893,10 @@ function renderSettings() {
         const label = (s.sourceLabels && s.sourceLabels[key]) || key;
         const on = String(val) === "1";
         const count = counts[key];
+        const icon = TOOL_ICONS[key];
+        const initials = esc(label.slice(0, 2).toUpperCase());
         return `<div class="src-toggle">
-          <span class="dot ${on ? "on" : "off"}"></span>
+          <span class="intg-icon" style="width:28px;height:28px;border-radius:8px;flex:none">${icon ? `<img src="${icon}" alt="${initials}" data-fallback="${initials}">` : initials}</span>
           <span class="st-name">${esc(label)}</span>
           <span class="st-count">${count != null ? count.toLocaleString("id-ID") + " transcripts" : ""}</span>
           <div class="spacer"></div>
@@ -902,6 +904,9 @@ function renderSettings() {
         </div>`;
       })
       .join("");
+    box.querySelectorAll("img[data-fallback]").forEach((img) => {
+      img.addEventListener("error", () => img.replaceWith(document.createTextNode(img.dataset.fallback || "")));
+    });
     box.querySelectorAll("[data-src]").forEach((sw) => {
       sw.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1033,8 +1038,29 @@ let __labelRaf = 0;
 
 
 const INTEGRATION_LOGOS = {
-  claude: "logos/claude.png", codex: "logos/codex.png", opencode: "logos/opencode.ico",
-  gemini: "logos/gemini.png", copilot: "logos/copilot.svg", antigravity: "logos/antigravity.png",
+  claude: "logos/claude.png",
+  codex: "logos/codex.png",
+  opencode: "logos/opencode.ico",
+  gemini: "logos/gemini.png",
+  copilot: "logos/copilot.png",
+  antigravity: "logos/antigravity.png",
+  "claude-desktop": "logos/claude-desktop.svg",
+  cursor: "logos/cursor.svg",
+  windsurf: "logos/windsurf.svg",
+  vscode: "logos/vscode.svg",
+  cline: "logos/cline.svg",
+  zed: "logos/zed.svg",
+};
+const TOOL_ICONS = {
+  claude: "logos/claude.png",
+  codex: "logos/codex.png",
+  opencode: "logos/opencode.ico",
+  gemini: "logos/gemini.png",
+  copilot: "logos/copilot.png",
+  antigravity: "logos/antigravity.png",
+  vscode: "logos/vscode.svg",
+  cursor: "logos/cursor.svg",
+  windsurf: "logos/windsurf.svg",
 };
 const INTEGRATIONS = [
   ["claude", "Claude Code", t("MCP stdio — mirrors context into every `/memory` session")],
@@ -1052,6 +1078,7 @@ const INTEGRATIONS = [
 ];
 
 async function renderIntegrations() {
+  const mark = viewSeq("integrations");
   const box = $("#integrationsBox");
   try {
     const d = await api("/api/integrations");
