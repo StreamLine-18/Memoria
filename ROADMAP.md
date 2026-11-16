@@ -5,7 +5,7 @@
 
 ---
 
-## ⏭️ POSI TERKINI (2026-11-13) — untuk melanjutkan kerja
+## ⏭️ POSI TERKINI (2026-11-16) — untuk melanjutkan kerja
 
 **Selesai & ter-push (main):** F0 ✅ · F1A ✅ (acceptance 12/12) · F1B ✅ (smoke 6/6) ·
 **F1C ✅ (2026-11-11, `feat/f1c-retrieval-scale`)**: FTS5 keyword search (trigram, rerank
@@ -28,21 +28,29 @@ dengan header AAD, apply idempoten + LWW/tombstone + relay full export + project
 alias (slug/path lokal tidak disinkronkan), embedding backfill lokal, guard
 `sync.groupKey` di `/api/settings`, shared-folder watcher + atomic/debounced
 export + scan/apply idempoten + cleanup bundle sendiri, dan Settings **Sync**
-(status/folder/conflict UI + API lokal) + README/i18n. Test suite kini **41
+(status/folder/conflict UI + API lokal) + README/i18n. Test suite kini **72
 kasus**. Berikutnya **M5**: hardening (rotasi/revokasi kunci, proteksi, performa).
 
+**Heuristic/no-AI maximization (2026-11-16, in progress/branch):** ekstraksi aturan
+lebih kaya (kalimat/list-checkbox/TODO, sinyal kode/path/cmd/error, ID/EN) +
+confidence/signal; sinyal kuat (task/decision/error-fix/fakta ber-entitas)
+auto-promoted ke `active` dengan `origin:'heuristic'` (dibatasi per sesi) agar
+resume/recall/link lintas-AI instan saat limit-hopping, sisanya draft. Snapshot
+deterministik aktif, dedupe/link mencakup draft heuristik, task lifecycle menutup
+draft heuristik, dan handoff/resume punya fallback deterministik (draft/snapshot/
+transkrip). Backfill data lama & upgrade embedding: `maintain
+heuristic-promote|reembed|consolidate|all` + promosi sekali-jalan saat startup.
+Sumber capture Windsurf diaktifkan default. E2E terisolasi (heuristik, tanpa
+model) lolos: ekstrak+snapshot+resume lintas sesi/tool.
+
 **Backlog eksekusi berikutnya (urut):**
-1. ~~F1C sisa~~ ✅ (2026-11-11) · ~~F2~~ ✅ (v0.5.0) · ~~webhook notifikasi~~ ✅ (F3, 2026-11-11:
-   Discord/Telegram/generic + 4 event + Send test + secret terenkripsi)
+1. Merge & rilis heuristic-maximization; verifikasi E2E di instalasi/DB nyata
+   (watcher aktif, lintas tool) dan jalankan `maintain heuristic-promote`/`reembed`
+   bila perlu untuk data lama.
 2. **Sync M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ →
    M5 hardening** (desain: `docs/sync-design.md`). Code signing/notarization masih
    menunggu keputusan biaya (Apple Developer + cert Windows).
-3. ~~Sisa kecil F1B/F1C~~ ✅ (2026-11-12): `embedMany` provider OpenAI-compat
-   (batch 64/request, mapping via `index`, chunk otomatis) + SQL-level LIMIT
-   `/api/memories` & `/api/memories/list` (`listMemoriesPage`).
-4. Rilis v0.7.1 ✅ (tag + changelog): pagination SQL, batch embedding
-   OpenAI-compat, CI verify + tag guard. Rilis berikutnya menunggu sync M2+
-   atau code signing.
+3. Rilis berikutnya menunggu sync M5 atau code signing.
 
 **Catatan lingkungan:** server live jalan via `nohup node dist/engine/index.js server` (port 48210,
 data asli ~/.memoria, 17.8k transkrip; backlog ekstraksi qwen berjalan bertahap di background).

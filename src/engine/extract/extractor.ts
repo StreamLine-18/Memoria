@@ -1,6 +1,7 @@
 import { getDb, getPendingExtraction, markExtracted, projectSlugById, getBoolSetting } from "../store/db";
 import { getExtractProvider, getEmbedProvider, embedManyVia } from "./provider";
 import { addMemoryWithDedupe } from "./dedupe";
+import { assessHeuristicSignal } from "./heuristic";
 
 let running = false;
 let lastAttempt = 0;
@@ -68,10 +69,11 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
     // konteks untuk pindah tool tersedia secepatnya, sisanya menyusul di background.
     const pending = getPendingExtraction(160, opts.order ?? "asc");
     if (!pending.length) return 0;
-    // Hasil heuristik kualitasnya lebih rendah → SELALU lewat antrian tinjau (draft),
-    // terlepas dari mode tinjau global.
+    // Heuristik: sinyal kuat (task/decision/error-fix/fakta ber-entitas) dipromosikan
+    // ke ACTIVE agar resume/recall/link lintas-AI langsung jalan saat limit-hopping;
+    // sisanya tetap draft (review queue). Transparan via origin "heuristic".
     const heuristic = extractProv.id === "heuristic";
-    const status = heuristic ? "draft" : getBoolSetting("reviewMode", false) ? "draft" : "active";
+    const defaultStatus = heuristic ? "draft" : getBoolSetting("reviewMode", false) ? "draft" : "active";
     const origin = heuristic ? "heuristic" : "llm";
 
     const bySession = new Map<string, typeof pending>();
@@ -85,6 +87,8 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
       const sorter = rows.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
       const projectId = rows[0].projectId;
       const tool = rows[0].tool;
+      let autoPromoted = 0;
+      const MAX_AUTO_PROMOTE = 8; // batasi noise per sesi, tetap memberi kontinuitas instan
 
       const windows: typeof pending[] = [];
       const CHUNK = 24;
@@ -104,11 +108,24 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
         // Batch embedding: satu panggilan untuk seluruh window (F1C).
         const embs = await embedManyVia(embedProv, kept.map((m) => m.content));
         kept.forEach((mem, i) => {
+          let status = defaultStatus;
+          let importance = mem.importance;
+          if (heuristic) {
+            const sig = assessHeuristicSignal(mem as any);
+            if (sig.activate && autoPromoted < MAX_AUTO_PROMOTE) {
+              status = "active";
+              autoPromoted++;
+              // sinyal kuat sedikit dinaikkan agar mudah muncul di resume/context
+              importance = Math.max(importance, sig.signals.some((s) => ["path","cmd","err","ref","entity"].includes(s)) ? 0.58 : 0.52);
+            } else {
+              status = "draft";
+            }
+          }
           addMemoryWithDedupe({
             projectId: projectId || null,
             kind: mem.kind,
             content: mem.content,
-            importance: mem.importance,
+            importance,
             createdAt: winRows[0]?.ts || Date.now(),
             lastAccessed: 0,
             accessCount: 0,

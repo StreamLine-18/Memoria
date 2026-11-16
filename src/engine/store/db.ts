@@ -1701,6 +1701,26 @@ export function pendingExtractionCount(): number {
   return row.c;
 }
 
+/** Promosikan draft heuristik lama yang memenuhi sinyal kuat ke active.
+ * Dipakai untuk backfill data lama setelah peningkatan mesin heuristik,
+ * tanpa menyentuh memori non-heuristik. */
+export function listHeuristicDrafts(): Memory[] {
+  return readMemories(
+    "WHERE archived = 0 AND status = 'draft' AND origin = 'heuristic' ORDER BY created_at DESC",
+    []
+  );
+}
+
+/** Reset flag extracted untuk transkrip (re-ekstrak). Hanya dipakai tooling
+ * backfill; pemanggil bertanggung jawab membatasi scope. */
+export function resetExtractedForProject(projectId: number): number {
+  const r = getDb()
+    .prepare("UPDATE transcripts SET extracted = 0 WHERE project_id = ? AND content != ''")
+    .run(projectId);
+  return Number(r.changes) || 0;
+}
+
+
 export function deleteMemory(id: number): boolean {
   bumpDataVersion();
   const d = getDb();

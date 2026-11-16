@@ -37,11 +37,25 @@ export function stopBackgroundJobs(): void {
   }
 }
 
+let heuristicBackfillDone = false;
+
 async function runHousekeepingSoon(): Promise<void> {
   try {
     const { extractQueue, runHousekeeping } = await import("./extract/extractor");
     runHousekeeping();
     await extractQueue(false);
+    // Sekali per proses: promosikan draft heuristik lama yang kini memenuhi
+    // ambang sinyal kuat (upgrade data lama tanpa re-ekstrak transkrip).
+    if (!heuristicBackfillDone) {
+      heuristicBackfillDone = true;
+      try {
+        const { promoteLegacyHeuristicDrafts } = await import("./extract/heuristic");
+        const r = promoteLegacyHeuristicDrafts(2000);
+        if (r.promoted) console.log(`[memoria] Heuristic drafts promoted: ${r.promoted}/${r.scanned}`);
+      } catch {
+        heuristicBackfillDone = false; /* coba lagi nanti */
+      }
+    }
     try {
       const { processEmbeddingBackfill } = await import("./sync/embed");
       const embedded = await processEmbeddingBackfill(50);

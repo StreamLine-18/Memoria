@@ -133,7 +133,7 @@ export function getConfig(): AppConfig {
       {
         tool: "windsurf",
         label: "Windsurf",
-        enabled: false,
+        enabled: true,
         kind: "vscdb",
         paths: [path.join(appdata, "Windsurf", "User", "globalStorage"), path.join(appdata, "Windsurf", "User", "workspaceStorage")],
       },

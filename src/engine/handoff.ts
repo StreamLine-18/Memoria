@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { allMemories, getDb, projectRecord, getBoolSetting, getSetting, setSetting } from "./store/db";
+import { allMemories, getDb, projectRecord, getBoolSetting, getSetting, setSetting, readMemories } from "./store/db";
 import { runGitLog, isGitRepo, runGitStatus, GitStatus } from "./git";
 
 const KIND_LABEL: Record<string, string> = {
@@ -35,6 +35,61 @@ interface ResumeData {
   decisions: Array<{ content: string; importance: number }>;
   git: GitStatus | null;
   lastMessages: Array<{ role: string; content: string }>;
+  snapshot?: string;
+}
+
+function normResume(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 90);
+}
+
+function pushUnique(
+  arr: Array<{ content: string; importance: number }>,
+  content: string,
+  importance: number,
+  limit: number
+): void {
+  const c = content.replace(/\s+/g, " ").trim();
+  if (!c || c.length < 10) return;
+  const k = normResume(c);
+  if (arr.some((x) => normResume(x.content) === k)) return;
+  if (arr.length < limit) arr.push({ content: c.slice(0, 180), importance });
+}
+
+function deriveResumeFromTranscripts(projectId: number): { tasks: Array<{ content: string; importance: number }>; decisions: Array<{ content: string; importance: number }> } {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT role, content FROM transcripts WHERE project_id = ? ORDER BY ts DESC, seq DESC LIMIT 40`
+    )
+    .all(projectId) as Array<{ role: string; content: string }>;
+  const tasks: Array<{ content: string; importance: number }> = [];
+  const decisions: Array<{ content: string; importance: number }> = [];
+  const todoRe = /\b(todo|next step|next steps|follow[- ]?up|remaining|still need|not yet|belum selesai|belum dibuat|akan dibuat|akan ditambahkan|tinggal|lanjut(kan)?|perlu dibuat|perlu diperbaiki|perlu ditambah|harus di|nanti|blocked|wip|plan to|need to|should)\b/i;
+  const decRe = /\b(keputusan|disepakati|diputuskan|kita pakai|kita pilih|kami pakai|memakai|menggunakan|pilih|daripada|decided|we('ll| will)? use|going with|chose|chosen|instead of|settle(d)? (on|for)|opt(ed)? for)\b/i;
+  for (const r of rows) {
+    const text = (r.content || "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    const candidates: string[] = [];
+    const lines = (r.content || "").split("\n");
+    for (const line of lines) {
+      const m = line.match(/^\s*(?:[-*]|\d+[.)])\s+(?:\[( |x|X)\]\s*)?(.*)$/);
+      if (m) {
+        if (m[1] === "x" || m[1] === "X") continue;
+        const body = (m[2] || "").trim();
+        if (body.length >= 12) candidates.push(body);
+      }
+    }
+    candidates.push(text.slice(0, 220));
+    for (const c of candidates) {
+      if (decRe.test(c)) pushUnique(decisions, c, 0.55, 3);
+      if (todoRe.test(c) || /^\s*(todo|next|plan|fix|add|implement|update|create|remove|refactor|investigate|check|verify|test)\b/i.test(c)) {
+        pushUnique(tasks, c, 0.55, 5);
+      }
+      if (tasks.length >= 5 && decisions.length >= 3) break;
+    }
+    if (tasks.length >= 5 && decisions.length >= 3) break;
+  }
+  return { tasks, decisions };
 }
 
 export async function collectResumeData(slug: string, opts: { slim?: boolean } = {}): Promise<ResumeData | null> {
@@ -69,6 +124,42 @@ export async function collectResumeData(slug: string, opts: { slim?: boolean } =
     )
     .all(proj.id) as Array<{ content: string; importance: number }>;
 
+  // Fallback deterministik (tanpa LLM): bila memori terstruktur belum cukup,
+  // ambil sinyal dari draft heuristik/snapshot & transkrip terbaru agar
+  // limit-hopping tetap nyambung di mode offline/heuristik.
+  if (tasks.length < maxTasks || decisions.length < maxDecisions) {
+    try {
+      const drafts = readMemories(
+        `WHERE project_id = ? AND archived = 0 AND status = 'draft' AND origin = 'heuristic'
+         ORDER BY created_at DESC LIMIT 40`,
+        [proj.id]
+      );
+      for (const m of drafts) {
+        if (tasks.length < maxTasks && m.kind === "task_pending") pushUnique(tasks, m.content, m.importance || 0.5, maxTasks);
+        if (decisions.length < maxDecisions && m.kind === "decision") pushUnique(decisions, m.content, m.importance || 0.5, maxDecisions);
+        if (tasks.length >= maxTasks && decisions.length >= maxDecisions) break;
+      }
+    } catch { /* ignore */ }
+  }
+  if (tasks.length < maxTasks || decisions.length < maxDecisions) {
+    const derived = deriveResumeFromTranscripts(proj.id);
+    for (const t of derived.tasks) pushUnique(tasks, t.content, t.importance, maxTasks);
+    for (const d of derived.decisions) pushUnique(decisions, d.content, d.importance, maxDecisions);
+  }
+
+  let snapshot: string | undefined;
+  try {
+    const snap = db
+      .prepare(
+        `SELECT content FROM memories
+         WHERE project_id = ? AND archived = 0 AND status = 'active' AND origin = 'heuristic'
+           AND content LIKE 'Work snapshot%'
+         ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(proj.id) as { content: string } | undefined;
+    if (snap?.content) snapshot = snap.content;
+  } catch { /* ignore */ }
+
   const lastMessages = lastSession
     ? (
         db
@@ -90,6 +181,7 @@ export async function collectResumeData(slug: string, opts: { slim?: boolean } =
     decisions,
     git,
     lastMessages,
+    snapshot,
   };
 }
 
@@ -103,7 +195,7 @@ function shortText(s: string, max = 140): string {
 
 /** Baris-baris section "⏸️ LANJUTAN SESI" — kosong bila tidak ada data sama sekali. */
 export function resumeSectionLines(d: ResumeData): string[] {
-  const hasAny = d.lastTool || d.tasks.length || d.decisions.length || (d.git?.dirty.length ?? 0);
+  const hasAny = d.lastTool || d.tasks.length || d.decisions.length || (d.git?.dirty.length ?? 0) || !!d.snapshot;
   if (!hasAny) return [];
   const lines: string[] = [];
   const head = [
@@ -124,6 +216,9 @@ export function resumeSectionLines(d: ResumeData): string[] {
   if (d.git?.dirty.length) {
     const extra = Math.max(0, d.git.dirty.length - 8);
     lines.push("", `**Dirty files (git):** ${d.git.dirty.slice(0, 8).join(", ")}${extra > 0 ? ` (+${extra} lainnya)` : ""}`);
+  }
+  if (d.snapshot) {
+    lines.push("", `**Latest snapshot:** ${shortText(d.snapshot.replace(/^Work snapshot[^:]*:?\s*/i, ""), 200)}`);
   }
   if (d.lastMessages.length) {
     lines.push("", "**Last session messages:**");
@@ -153,8 +248,11 @@ export async function generateResumePrompt(slug: string): Promise<string> {
   if (d.decisions.length) {
     lines.push(`- Locked decisions: ${d.decisions.map((c) => shortText(c.content, 80)).join("; ")}`);
   }
+  if (d.snapshot) {
+    lines.push(`- Snapshot: ${shortText(d.snapshot.replace(/^Work snapshot[^:]*:?\s*/i, ""), 140)}`);
+  }
   if (d.lastMessages.length) {
-    lines.push(`- Last message: (${d.lastMessages[0].role}) ${shortText(d.lastMessages[0].content, 120)}`);
+    lines.push(`- Last message: (${d.lastMessages[d.lastMessages.length - 1].role}) ${shortText(d.lastMessages[d.lastMessages.length - 1].content, 120)}`);
   }
   lines.push("Continue from there. Do not repeat the decisions above.");
   return lines.join("\n");

@@ -50,6 +50,17 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Added
+- **Heuristic/no-AI maximization (limit-hopping without a model)** — heuristic extraction is richer (sentences, lists/checkbox TODOs, code/command/path/error signals, ID/EN decision/error-fix/preference patterns) and scores each memory by confidence/signal. Strong heuristic signals (tasks, decisions, error-fixes, entity-backed facts) are now auto-promoted to `active` with `origin: "heuristic"` (capped per session) so recall/resume and cross-tool linking work instantly during limit-hopping; weaker results stay in the draft/review queue.
+- **Deterministic resume/handoff fallbacks** — `collectResumeData`/handoff now fall back to heuristic drafts, the latest deterministic work snapshot, and recent transcript signals when structured memories are sparse, so tool switches still get open tasks/locked decisions/snapshot context without an LLM.
+- **Deterministic snapshots active** — session/pre-limit work snapshots are stored as active `origin: "heuristic"` continuity memories.
+- **Legacy data & embedding upgrade path** — `promoteLegacyHeuristicDrafts()` (run once at startup and via CLI) promotes eligible legacy heuristic drafts; `maintain heuristic-promote|reembed|consolidate|all` CLI backfills old data and re-embeds memories to the current embedding dialect for offline→cloud/model upgrades.
+- **Tests** — `tests/heuristic-mode.test.mjs` covers heuristic extraction/promotion, snapshot activation, draft dedupe/linking, deterministic resume fallback, and heuristic task lifecycle.
+
+### Changed
+- **Heuristic dedupe/task lifecycle** — dedupe/link candidates include heuristic drafts (merge/link without surfacing to recall), and task lifecycle can resolve heuristic draft `task_pending` items.
+- **Windsurf capture enabled by default** — Windsurf vscdb source is now enabled out of the box (still subject to per-install source settings) to improve cross-tool coverage.
+
 ## [0.10.0] — 2026-11-14 — The Bridge
 
 **One URL for every AI tool.** The engine now serves MCP over HTTP, Integrations
