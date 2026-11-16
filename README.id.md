@@ -124,7 +124,7 @@ flowchart TB
 
 | | Minimum | Catatan |
 |---|---|---|
-| Windows | 10/11 | |
+| Windows | 10/11 | Instalator `.exe` (NSIS) |
 | Linux | distro .deb / AppImage | tray butuh libappindicator |
 | macOS | 12+ | Apple Silicon & Intel |
 | Node.js | ≥ 22.5 | hanya untuk build dari source |
