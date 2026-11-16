@@ -1340,6 +1340,24 @@ async function loadSettingsToggles() {
     mark("notifyDiscordHas", "stNotifyDiscord");
     mark("notifyTelegramHas", "stNotifyTelegram");
     mark("notifyGenericHas", "stNotifyGeneric");
+    // Engine/provider fields
+    const setSel = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val !== undefined && val !== null && val !== "") el.value = String(val);
+    };
+    const setInput = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val !== undefined && val !== null) el.value = String(val);
+    };
+    setSel("setExtractEngine", s.extractEngine || "auto");
+    setSel("setEmbedEngine", s.embedEngine || "auto");
+    setSel("setApiProvider", s.openaiProvider || "custom");
+    setInput("setOpenaiBaseUrl", s.openaiBaseUrl || "");
+    setInput("setOpenaiExtractModel", s.openaiExtractModel || "");
+    setInput("setOpenaiEmbedModel", s.openaiEmbedModel || "");
+    const kst = document.getElementById("stOpenaiKey");
+    if (kst) kst.textContent = s.openaiHasKey === "1" ? t("API key stored — refill to replace") : t("Not set");
+    updateEngineVisibility();
   } catch {
     /* non-blokir */
   }
@@ -1953,6 +1971,64 @@ function wireShortcutInputs() {
 }
 wireShortcutInputs();
 
+const PROVIDER_PRESETS = {
+  custom: { baseUrl: "", extract: "gpt-4o-mini", embed: "text-embedding-3-small" },
+  lmstudio: { baseUrl: "http://localhost:1234/v1", extract: "local-model", embed: "text-embedding-nomic-embed-text-v1.5" },
+  ollama: { baseUrl: "http://localhost:11434/v1", extract: "llama3.2", embed: "nomic-embed-text" },
+  llamacpp: { baseUrl: "http://localhost:8080/v1", extract: "local-model", embed: "local-embed" },
+  openai: { baseUrl: "https://api.openai.com/v1", extract: "gpt-4o-mini", embed: "text-embedding-3-small" },
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", extract: "openai/gpt-4o-mini", embed: "openai/text-embedding-3-small" },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", extract: "llama-3.3-70b-versatile", embed: "" },
+  together: { baseUrl: "https://api.together.xyz/v1", extract: "meta-llama/Llama-3.3-70B-Instruct-Turbo", embed: "togethercomputer/m2-bert-80M-8k-retrieval" },
+  fireworks: { baseUrl: "https://api.fireworks.ai/inference/v1", extract: "accounts/fireworks/models/llama-v3p3-70b-instruct", embed: "nomic-ai/nomic-embed-text-v1.5" },
+  mistral: { baseUrl: "https://api.mistral.ai/v1", extract: "mistral-small-latest", embed: "mistral-embed" },
+  deepseek: { baseUrl: "https://api.deepseek.com/v1", extract: "deepseek-chat", embed: "" },
+};
+
+function intelModeFrom(ex, em) {
+  if (ex === "heuristic" && em === "hash") return "local";
+  if (ex === "auto" && em === "auto") return "auto";
+  if (ex === "ollama" && em === "ollama") return "ollama";
+  if (ex === "openai" && em === "openai") return "cloud";
+  return "custom";
+}
+
+function updateEngineVisibility() {
+  const ex = document.getElementById("setExtractEngine");
+  const em = document.getElementById("setEmbedEngine");
+  const box = document.getElementById("engineCloudConfig");
+  const modeSel = document.getElementById("setIntelMode");
+  const hint = document.getElementById("intelModeHint");
+  const customOpt = document.getElementById("intelModeCustom");
+  const advBox = document.getElementById("intelAdvancedBox");
+  const advSw = document.getElementById("intelAdvancedSw");
+  if (!ex || !em) return;
+  const mode = intelModeFrom(ex.value, em.value);
+  if (modeSel) {
+    if (customOpt) { customOpt.hidden = mode !== "custom"; customOpt.disabled = mode !== "custom"; }
+    modeSel.value = mode;
+  }
+  if (hint) {
+    const hints = {
+      local: t("No model, fully local. Rule-based extraction (review queue) + local hash embeddings."),
+      auto: t("Uses Ollama when running, otherwise local heuristics/hash. Nothing leaves this machine."),
+      ollama: t("Local LLM via Ollama for both extraction and semantic embeddings."),
+      cloud: t("Uses the provider below for extraction and embeddings (data may leave this machine)."),
+      custom: t("Mixed/advanced configuration (extraction and embedding set separately)."),
+    };
+    hint.textContent = hints[mode] || "";
+  }
+  // auto-show advanced when custom
+  if (mode === "custom" && advBox && advSw) {
+    advBox.style.display = "";
+    advSw.classList.add("on");
+  }
+  if (box) {
+    const needs = ex.value === "openai" || em.value === "openai";
+    box.style.display = needs ? "" : "none";
+  }
+}
+
 function wireEngineSettings() {
   // API key hanya dikirim bila diisi (tidak menimpa key tersimpan dengan kosong).
   const fields = [
@@ -1975,6 +2051,85 @@ function wireEngineSettings() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ key, value }),
         });
+        if (key === "openaiApiKey") {
+          el.value = "";
+          const kst = document.getElementById("stOpenaiKey");
+          if (kst) kst.textContent = t("API key stored — refill to replace");
+          toast(t("Saved — encrypted"));
+        } else {
+          if (key === "extractEngine" || key === "embedEngine") updateEngineVisibility();
+          toast(t("Engine updated — applied instantly"));
+        }
+        loadStats();
+      } catch (e) {
+        toast(t("Failed to save: ") + e.message, "err");
+      }
+    });
+  }
+
+  const modeSel = document.getElementById("setIntelMode");
+  if (modeSel) {
+    modeSel.addEventListener("change", async () => {
+      const mode = modeSel.value;
+      if (mode === "custom") { updateEngineVisibility(); return; }
+      const map = {
+        local: ["heuristic", "hash"],
+        auto: ["auto", "auto"],
+        ollama: ["ollama", "ollama"],
+        cloud: ["openai", "openai"],
+      };
+      const pair = map[mode];
+      if (!pair) return;
+      const exEl = document.getElementById("setExtractEngine");
+      const emEl = document.getElementById("setEmbedEngine");
+      if (exEl) exEl.value = pair[0];
+      if (emEl) emEl.value = pair[1];
+      updateEngineVisibility();
+      try {
+        await Promise.all([
+          api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "extractEngine", value: pair[0] }) }),
+          api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "embedEngine", value: pair[1] }) }),
+        ]);
+        toast(t("Engine updated — applied instantly"));
+        loadStats();
+      } catch (e) {
+        toast(t("Failed to save: ") + e.message, "err");
+      }
+    });
+  }
+
+  const advSw = document.getElementById("intelAdvancedSw");
+  const advBox = document.getElementById("intelAdvancedBox");
+  const advRow = document.getElementById("intelAdvancedRow");
+  if (advSw && advBox) {
+    const toggleAdv = () => {
+      const on = advSw.classList.toggle("on");
+      advBox.style.display = on ? "" : "none";
+    };
+    advSw.addEventListener("click", toggleAdv);
+    if (advRow) advRow.addEventListener("click", (e) => { if (e.target !== advSw && !advSw.contains(e.target)) toggleAdv(); });
+  }
+
+  updateEngineVisibility();
+  const prov = document.getElementById("setApiProvider");
+  if (prov) {
+    prov.addEventListener("change", async () => {
+      const p = PROVIDER_PRESETS[prov.value];
+      const base = document.getElementById("setOpenaiBaseUrl");
+      const ex = document.getElementById("setOpenaiExtractModel");
+      const em = document.getElementById("setOpenaiEmbedModel");
+      if (p) {
+        if (base) base.value = prov.value === "custom" ? (base.value || "") : (p.baseUrl || "");
+        if (ex) ex.value = p.extract || "";
+        if (em) em.value = p.embed || "";
+      }
+      try {
+        await Promise.all([
+          api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "openaiProvider", value: prov.value }) }),
+          base ? api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "openaiBaseUrl", value: base.value.trim() }) }) : Promise.resolve(),
+          ex ? api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "openaiExtractModel", value: ex.value.trim() }) }) : Promise.resolve(),
+          em ? api("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "openaiEmbedModel", value: em.value.trim() }) }) : Promise.resolve(),
+        ]);
         toast(t("Engine updated — applied instantly"));
         loadStats();
       } catch (e) {
