@@ -50,7 +50,9 @@ export function textSimilarity(a: string, b: string): number {
  * filter di JS. Catatan: pada jalur teks kandidat project_id NULL ikut
  * dibandingkan (perilaku filter lama dipertahankan persis). */
 function dedupeCandidates(m: Memory, hasEmb: boolean): Memory[] {
-  const where = ["archived = 0", "status = 'active'"];
+  // Kandidat dedupe/link: active + draft heuristik (agar pipeline heuristik
+  // bisa saling menggabung/meng-link tanpa memunculkan draft ke recall).
+  const where = ["archived = 0", "(status = 'active' OR (status = 'draft' AND origin = 'heuristic'))"];
   const params: Array<string | number> = [];
   if (m.projectId != null) {
     where.push("(project_id IS NULL OR project_id = ?)");

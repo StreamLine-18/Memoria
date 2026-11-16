@@ -1,20 +1,27 @@
-import { allMemories, updateMemory, getDb, markResolved, listDraft } from "../store/db";
+import { allMemories, updateMemory, getDb, markResolved, readMemories } from "../store/db";
 
 const DONE_WORDS = [
   "selesai", "beres", "kelar", "done", "fixed", "berhasil", "sukses", "complete",
   "completed", "resolved", "solved", "settled", "accomplished", "finished", "tuntas",
-  "sudah saya", "sudah diperbaiki", "sudah diperbaiki", "teratasi",
+  "sudah saya", "sudah diperbaiki", "teratasi", "implemented", "merged", "shipped",
 ];
 
-const IN_PROGRESS_WORDS = ["sedang", "mulai", "akan", "progress", "in progress", "sedang proses", "lagi", "menangani"];
+const IN_PROGRESS_WORDS = ["sedang", "mulai", "akan", "progress", "in progress", "sedang proses", "lagi", "menangani", "working on", "implementing"];
 
 function hasAny(text: string, words: string[]): boolean {
-  return words.some((w) => text.toLowerCase().includes(w));
+  const lc = text.toLowerCase();
+  return words.some((w) => lc.includes(w));
 }
 
 export function runTaskLifecycle(projectId: number): void {
   const d = getDb();
-  const pending = allMemories().filter((m) => m.projectId === projectId && m.kind === "task_pending");
+  // Aktif + draft heuristik (sinyal yang belum/tidak dipromosikan tetap bisa ditutup
+  // agar tidak menggantung; recall tetap hanya menampilkan aktif).
+  const pending = readMemories(
+    `WHERE project_id = ? AND kind = 'task_pending' AND archived = 0 AND COALESCE(resolved_at, 0) = 0
+       AND (status = 'active' OR (status = 'draft' AND origin = 'heuristic'))`,
+    [projectId]
+  );
   if (!pending.length) return;
 
   const since = Math.min(...pending.map((p) => p.createdAt));
@@ -49,14 +56,15 @@ function keywordsOf(content: string): string[] {
     "yang", "dan", "atau", "untuk", "dengan", "dari", "pada", "ke", "di", "ini", "itu", "agar",
     "the", "and", "for", "with", "from", "that", "this", "a", "an", "to", "of", "in", "on",
     "buat", "bikin", "membuat", "task", "tugas", "selesaikan", "perbaiki", "fix", "implement",
+    "please", "need", "should", "would", "could",
   ]);
-  const words = content.toLowerCase().match(/[a-z0-9_\-]{5,}/g) || [];
+  const words = content.toLowerCase().match(/[a-z0-9_\-]{4,}/g) || [];
   const freq = new Map<string, number>();
   for (const w of words) {
     if (stop.has(w)) continue;
     freq.set(w, (freq.get(w) || 0) + 1);
   }
-  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([w]) => w);
+  return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
 }
 
 export function countOpen(projectId?: number): number {

@@ -89,6 +89,30 @@ async function main(): Promise<void> {
       await runSyncCommand(process.argv.slice(3));
       break;
     }
+    case "maintain": {
+      ensureDb();
+      const sub = process.argv[3] || "all";
+      if (sub === "heuristic-promote" || sub === "all") {
+        const { promoteLegacyHeuristicDrafts } = await import("./extract/heuristic");
+        const r = promoteLegacyHeuristicDrafts(2000);
+        console.log(`Heuristic drafts: scanned ${r.scanned}, promoted ${r.promoted}`);
+      }
+      if (sub === "reembed" || sub === "all") {
+        const { reembedAll } = await import("./sync/embed");
+        const r = await reembedAll({ batch: 64 });
+        console.log(`Re-embed: queued ${r.queued}, embedded ${r.embedded} (target ${r.targetModel})`);
+      }
+      if (sub === "consolidate") {
+        const { consolidateMemories } = await import("./extract/consolidate");
+        const r = await consolidateMemories();
+        console.log(`Consolidation: removed ${r.removed} in ${r.clusters} clusters`);
+      }
+      if (!["heuristic-promote", "reembed", "all", "consolidate"].includes(sub)) {
+        console.log("Usage: node dist/engine/index.js maintain <heuristic-promote|reembed|consolidate|all>");
+        process.exit(1);
+      }
+      break;
+    }
     case "server": {
       ensureDb();
       await startHttpServer();
