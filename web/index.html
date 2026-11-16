@@ -1276,7 +1276,7 @@
                 <select id="setExtractEngine" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-size:12px; outline:none">
                   <option value="auto" data-i18n="Auto (Ollama → Heuristics)">Auto (Ollama → Heuristics)</option>
                   <option value="ollama" data-i18n="Ollama (local)">Ollama (local)</option>
-                  <option value="openai" data-i18n="OpenAI-compatible (LM Studio / cloud)">OpenAI-compatible (LM Studio / cloud)</option>
+                  <option value="openai" data-i18n="Cloud / API (OpenAI-compatible)">Cloud / API (OpenAI-compatible)</option>
                   <option value="heuristic" data-i18n="Heuristics (no model)">Heuristics (no model)</option>
                 </select>
               </div>
@@ -1285,18 +1285,47 @@
                 <select id="setEmbedEngine" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-size:12px; outline:none">
                   <option value="auto" data-i18n="Auto (Ollama → Hash)">Auto (Ollama → Hash)</option>
                   <option value="ollama" data-i18n="Ollama (local)">Ollama (local)</option>
-                  <option value="openai">OpenAI-compatible</option>
+                  <option value="openai" data-i18n="Cloud / API (OpenAI-compatible)">Cloud / API (OpenAI-compatible)</option>
                   <option value="hash" data-i18n="Local hash (no model)">Local hash (no model)</option>
                 </select>
               </div>
-              <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border)">
-                <div class="card-desc" data-i18n-html="OpenAI-compatible endpoint — LM Studio (localhost:1234), llama.cpp, vLLM, or cloud. <b style='color:var(--warn, #e5686b)'>Privacy note:</b> using a cloud endpoint means session content leaves this machine.">OpenAI-compatible endpoint — LM Studio (localhost:1234), llama.cpp, vLLM, or cloud. <b style='color:var(--warn, #e5686b)'>Privacy note:</b> using a cloud endpoint means session content leaves this machine.</div>
-                <input type="text" id="setOpenaiBaseUrl" placeholder="http://localhost:1234/v1" style="width:100%; margin-top:6px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
-                <div style="display:flex; gap:8px; margin-top:8px">
-                  <input type="text" id="setOpenaiExtractModel" placeholder="extraction model" data-i18n-ph="extraction model" style="flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
-                  <input type="text" id="setOpenaiEmbedModel" placeholder="embedding model" data-i18n-ph="embedding model" style="flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+              <div id="engineCloudConfig" style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border); display:none">
+                <div class="card-desc" data-i18n-html="Use an official OpenAI-compatible endpoint or a local server. <b style='color:var(--warn, #e5686b)'>Privacy note:</b> using a cloud endpoint means session content leaves this machine. Only use providers/endpoints that permit this use under their ToS (no unofficial proxies).">Use an official OpenAI-compatible endpoint or a local server. <b style='color:var(--warn, #e5686b)'>Privacy note:</b> using a cloud endpoint means session content leaves this machine. Only use providers/endpoints that permit this use under their ToS (no unofficial proxies).</div>
+                <div style="margin-top:8px">
+                  <label class="t-label" for="setApiProvider" data-i18n="Provider">Provider</label>
+                  <select id="setApiProvider" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-size:12px; outline:none">
+                    <option value="custom" data-i18n="Custom (OpenAI-compatible)">Custom (OpenAI-compatible)</option>
+                    <option value="lmstudio">LM Studio (local)</option>
+                    <option value="ollama">Ollama (OpenAI-compatible, local)</option>
+                    <option value="llamacpp">llama.cpp server (local)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="together">Together AI</option>
+                    <option value="fireworks">Fireworks AI</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="deepseek">DeepSeek</option>
+                  </select>
                 </div>
-                <input type="password" id="setOpenaiApiKey" placeholder="API key (optional for local LM Studio)" data-i18n-ph="API key (optional for local LM Studio)" style="width:100%; margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                <div style="margin-top:8px">
+                  <label class="t-label" for="setOpenaiBaseUrl" data-i18n="Base URL">Base URL</label>
+                  <input type="text" id="setOpenaiBaseUrl" placeholder="https://api.example.com/v1" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                </div>
+                <div style="display:flex; gap:8px; margin-top:8px">
+                  <div style="flex:1; min-width:0">
+                    <label class="t-label" for="setOpenaiExtractModel" data-i18n="Extraction model">Extraction model</label>
+                    <input type="text" id="setOpenaiExtractModel" placeholder="e.g. gpt-4o-mini" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                  </div>
+                  <div style="flex:1; min-width:0">
+                    <label class="t-label" for="setOpenaiEmbedModel" data-i18n="Embedding model">Embedding model</label>
+                    <input type="text" id="setOpenaiEmbedModel" placeholder="e.g. text-embedding-3-small" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                  </div>
+                </div>
+                <div style="margin-top:8px">
+                  <label class="t-label" for="setOpenaiApiKey" data-i18n="API key">API key</label>
+                  <input type="password" id="setOpenaiApiKey" placeholder="API key (optional for local servers)" data-i18n-ph="API key (optional for local servers)" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                  <div class="card-desc" id="stOpenaiKey" style="margin-top:4px"></div>
+                </div>
               </div>
             </div>
             
