@@ -50,6 +50,8 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-11-18 — Zero-Approval Tier 0
+
 **Tier 0 without manual approval.** Heuristic drafts are now triaged
 automatically (noise/duplicates → archive, strong or corroborated signals →
 active), plus a capture data-loss fix, secret redaction, progressive context
@@ -131,6 +133,7 @@ disclosure for agents, and capture exclusions.
   `GET /api/drafts/groups`, `GET /api/privacy`.
 - CLI: `maintain triage [--apply|--undo]`, `memoria help`; `bin` entry and
   shebang for `npx`/global install (headless mode = `memoria server`).
+- **npm package `@xinzzu/memoria`** for headless/CLI use (`npx @xinzzu/memoria@latest server`); published from CI on every `v*` tag via npm trusted publishing. The Electron app keeps its runtime name `memoria` (`build.extraMetadata`), so data folders and Keychain entries do not change.
 - Labelled evaluation set + `npm run eval:heuristic` (active precision,
   memories kept, noise removed), enforced in the test suite.
 
