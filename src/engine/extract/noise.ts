@@ -31,6 +31,8 @@ export const NOISE_RULES: NoiseRule[] = [
   re("size-line", /^\d+(\.\d+)?[KMGT]i?B?\s+[\w./~-]+$/),
   re("table-row", /^\|.*\|$/),
   re("image-meta", /^Multiply coordinates by [\d.]+ to map to original image/i),
+  // Sentence split in the middle of a markdown link: `docs/X.md](file:///…)`.
+  re("link-fragment", /^[^\s[]*\]\((?:file|https?):\/\/|^\S+\]\(\S+\)\**:?\s*$/),
   re("tool-marker", /^\((?:Bash|Tool|Command) (?:completed|ran|finished)[^)]*\)$|^\[(?:command|bash|tool|output|stdout|stderr|result|image|request interrupted)[^\]]*\]/i),
   re("git-output", /^\[[\w./-]+ [0-9a-f]{7,}\]|^(?:On branch|Your branch is|Changes (?:not staged|to be committed)|Untracked files|nothing to commit|Switched to (?:a new )?branch|HEAD is now at)\b|^[0-9a-f]{7,40}\s+\S/),
   re("box-drawing", /^[│├└┌┐┘╰╭╮╯─═║┃┏┗┣▶►→•·]{1,}[\s─═►→]/),

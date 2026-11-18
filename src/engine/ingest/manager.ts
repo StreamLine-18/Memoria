@@ -7,6 +7,7 @@ import { scanOpencode } from "./opencode";
 import { scanGenericJsonl } from "./generic";
 import { scanCopilot } from "./copilot";
 import { scanAntigravity } from "./antigravity";
+import { scanAntigravityBrain } from "./antigravity-brain";
 import { scanVscdb } from "./vscdb";
 import { extractQueue } from "../extract/extractor";
 import { emitEvent } from "../events";
@@ -81,8 +82,13 @@ export async function scanAll(log?: (msg: string) => void): Promise<ScanResult[]
             break;
           case "logs":
             for (const p of src.paths) {
-              const r = scanAntigravity(p);
-              count += r.lines;
+              if (/[\\/]\.gemini[\\/]antigravity/.test(p)) {
+                const r = await scanAntigravityBrain(p);
+                count += r.lines;
+              } else {
+                const r = scanAntigravity(p);
+                count += r.lines;
+              }
             }
             break;
           case "vscdb":

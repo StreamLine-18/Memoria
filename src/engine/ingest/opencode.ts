@@ -7,7 +7,7 @@ import {
   getSourceOffset,
   setSourceOffset,
 } from "../store/db";
-import { projectSlugFromCwd } from "./util";
+import { projectSlugFromCwd, stripInjectedTags, todosToChecklist } from "./util";
 
 export function scanOpencode(dbPath: string): { messages: number } {
   if (!fs.existsSync(dbPath)) return { messages: 0 };
@@ -42,7 +42,14 @@ export function scanOpencode(dbPath: string): { messages: number } {
           .prepare("SELECT data FROM part WHERE message_id = ? ORDER BY time_created")
           .all(msg.id) as Array<{ data: string }>;
 
-        let textParts: string[] = [];
+        // Text parts are the message itself. Tool calls used to be appended to
+        // the assistant text as "[command] …", which mixed machine output into
+        // what the heuristic extractor reads as the agent's words; they are now
+        // separate role "tool" rows (kept for snapshots and search). Synthetic
+        // text parts are injected by OpenCode, not typed by anyone.
+        const textParts: string[] = [];
+        const toolParts: string[] = [];
+        let todos = "";
         for (const p of parts) {
           let pd: any;
           try {
@@ -51,23 +58,23 @@ export function scanOpencode(dbPath: string): { messages: number } {
             continue;
           }
           if (pd.type === "text" && typeof pd.text === "string") {
-            textParts.push(pd.text);
+            if (!pd.synthetic) textParts.push(pd.text);
+          } else if (pd.type === "tool" && pd.tool === "todowrite") {
+            todos = todosToChecklist(pd.state?.input?.todos) || todos; // latest list wins
           } else if (pd.type === "tool" && pd.tool === "bash") {
             const cmd = pd.state?.metadata?.command || pd.state?.input?.command;
-            if (cmd) textParts.push(`[command] ${cmd}`);
+            if (cmd) toolParts.push(`$ ${cmd}`);
           }
         }
-        const content = textParts.join("\n").trim();
-        if (content) {
-          insertTranscript({
-            tool: "opencode",
-            sessionId: sess.id,
-            projectId,
-            role,
-            content,
-            ts: msg.time_created || Date.now(),
-            seq: nextSeq(sess.id),
-          });
+        const ts = msg.time_created || Date.now();
+        const rows: Array<{ role: "user" | "assistant" | "system" | "tool"; content: string }> = [
+          { role, content: stripInjectedTags(textParts.join("\n")).trim() },
+          { role: "assistant", content: todos },
+          { role: "tool", content: toolParts.join("\n").trim() },
+        ];
+        for (const r of rows) {
+          if (!r.content) continue;
+          insertTranscript({ tool: "opencode", sessionId: sess.id, projectId, role: r.role, content: r.content, ts, seq: nextSeq(sess.id) });
           total++;
         }
       }

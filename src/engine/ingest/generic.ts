@@ -7,11 +7,13 @@ import {
   ensureProject,
 } from "../store/db";
 import { withTx } from "../store/tx";
-import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental } from "./util";
+import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, stripInjectedTags } from "./util";
 
-function pickRole(j: any): "user" | "assistant" | "system" | null {
+function pickRole(j: any): "user" | "assistant" | "system" | "tool" | null {
   if (!j) return null;
   const r = String(j.role || j.type || j.sender || "").toLowerCase();
+  // Tool calls / results are machine output, not something a person said.
+  if (/tool|function_call|function_response|functionresponse/.test(r)) return "tool";
   if (r.includes("user") || r === "u" || r.includes("human")) return "user";
   if (r.includes("assistant") || r.includes("model") || r.includes("bot") || r.includes("ai")) return "assistant";
   return null;
@@ -26,7 +28,9 @@ export async function scanGenericJsonl(
   const files: string[] = [];
   for (const root of roots) {
     if (!fs.existsSync(root)) continue;
-    files.push(...walkFiles(root, filePatterns));
+    // Antigravity "brain" transcripts live under ~/.gemini too but have their
+    // own format and parser (antigravity.ts); skip them here.
+    files.push(...walkFiles(root, filePatterns).filter((f) => !/[\\/]brain[\\/]/.test(f)));
   }
   let totalLines = 0;
   for (let i = 0; i < files.length; i++) {
@@ -45,7 +49,8 @@ export async function scanGenericJsonl(
         if (!j) continue;
         const role = pickRole(j);
         if (!role) continue;
-        const content = textFromContent(j.content ?? j.message?.content ?? j.text) || "";
+        const raw = textFromContent(j.content ?? j.message?.content ?? j.text) || "";
+        const content = role === "tool" ? raw : stripInjectedTags(raw);
         if (!content.trim()) continue;
         const cwd = j.cwd || j.directory || j.projectPath;
         const projectId = ensureProject(projectSlugFromCwd(cwd), cwd);

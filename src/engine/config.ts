@@ -115,7 +115,13 @@ export function getConfig(): AppConfig {
         label: "Antigravity",
         enabled: true,
         kind: "logs",
-        paths: [path.join(appdata, "Antigravity", "logs")],
+        // IDE logs + "brain" conversation transcripts (IDE, CLI, agent).
+        paths: [
+          path.join(appdata, "Antigravity", "logs"),
+          path.join(home, ".gemini", "antigravity"),
+          path.join(home, ".gemini", "antigravity-ide"),
+          path.join(home, ".gemini", "antigravity-cli"),
+        ],
       },
       {
         tool: "vscode",

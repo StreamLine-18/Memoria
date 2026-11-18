@@ -7,7 +7,7 @@ import {
   ensureProject,
 } from "../store/db";
 import { withTx } from "../store/tx";
-import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, isToolResultOnly, stripInjectedTags } from "./util";
+import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, isToolResultOnly, stripInjectedTags, todosFromContent } from "./util";
 
 export async function scanClaude(root: string, log?: (msg: string) => void): Promise<{ files: number; lines: number }> {
   const files = walkFiles(root, [".jsonl"]);
@@ -46,6 +46,13 @@ export async function scanClaude(root: string, log?: (msg: string) => void): Pro
             ts: ts || Date.now(),
             seq: nextSeq(sessionId),
           });
+          totalLines++;
+        }
+        // TodoWrite: the agent's own task list → a checklist row the heuristic
+        // extractor turns into task_pending / task_done memories.
+        const todos = j.type === "assistant" ? todosFromContent(rawContent) : "";
+        if (todos) {
+          insertTranscript({ tool: "claude", sessionId, projectId, role: "assistant", content: todos, ts: ts || Date.now(), seq: nextSeq(sessionId) });
           totalLines++;
         }
       }
