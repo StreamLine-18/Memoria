@@ -71,7 +71,8 @@ export function getConfig(): AppConfig {
     ollamaEmbedModel: "nomic-embed-text",
     watcherDebounceMs: 8000,
     extractChunkSize: 40,
-    httpPort: 48210,
+    // MEMORIA_HTTP_PORT: run a second instance (tests, a dev server next to the app).
+    httpPort: Number(process.env.MEMORIA_HTTP_PORT) > 0 ? Number(process.env.MEMORIA_HTTP_PORT) : 48210,
     autoInjectProjectFiles: true,
     sources: [
       {

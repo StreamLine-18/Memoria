@@ -324,8 +324,15 @@ Global: `Ctrl/⌘ + Shift + M` quick note · `Ctrl/⌘ + Shift + Space` memory p
 - Capture, extraction, search — 100% local in `~/.memoria` by default.
 - The OpenAI-compatible tier is the **only** way data leaves the machine, and it requires
   explicit opt-in with a visible privacy warning.
-- API keys and webhook secrets are encrypted by the OS (Keychain on macOS / DPAPI on Windows)
-  when available and never returned to the UI.
+- API keys and webhook secrets are always encrypted and never returned to the UI: Electron
+  uses safeStorage; the CLI / npm mode uses AES-256-GCM with a master key kept in the macOS
+  Keychain, Linux Secret Service (`secret-tool`), or Windows DPAPI, falling back to an
+  owner-only key file.
+- Secrets are redacted from transcripts before storage; `<private>…</private>` blocks and
+  excluded projects are never stored.
+- The local API (`127.0.0.1:48210`) requires a token. The desktop app passes it
+  automatically; for headless mode `memoria server` prints a one-time sign-in link, and
+  `memoria token` prints it again. Data folder and database files are owner-only (0700/0600).
 - Encrypted sync bundles are end-to-end encrypted and never include embeddings, secrets,
   settings, transcripts, or machine-local paths.
 - Stale, low-importance memories are archived automatically (forgetting curve); backups keep

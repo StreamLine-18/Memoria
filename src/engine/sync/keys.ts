@@ -30,7 +30,7 @@ export interface SetupResult {
   joined: boolean;
 }
 
-export type KeyStorage = "env" | "safeStorage" | "passphrase" | "none";
+export type KeyStorage = "env" | "safeStorage" | "keychain" | "passphrase" | "none";
 
 export function getDeviceName(): string {
   return getSetting(DEVICE_NAME_SETTING, "") || os.hostname() || "local";
@@ -51,6 +51,7 @@ export function keyStorage(): KeyStorage {
   if (!stored) return "none";
   if (stored.startsWith("pass1:")) return "passphrase";
   if (stored.startsWith("enc1:")) return "safeStorage";
+  if (stored.startsWith("kc1:")) return "keychain";
   return "none";
 }
 
@@ -72,6 +73,16 @@ export function loadGroupKey(opts: UnlockOptions = {}): Buffer {
       throw new Error("Sync key is locked; pass --passphrase or set MEMORIA_SYNC_PASSPHRASE");
     }
     return unwrapKeyWithPassphrase(stored, passphrase);
+  }
+  if (stored.startsWith("kc1:")) {
+    // CLI/headless: AES-GCM with the OS-keychain master key (store/secretkey.ts).
+    const plain = decryptSecret(stored);
+    if (!plain) throw new Error("Cannot unlock sync key from the OS keychain");
+    try {
+      return assertSyncKey(Buffer.from(plain, "base64"));
+    } catch {
+      throw new Error("Stored sync key is corrupt");
+    }
   }
   if (stored.startsWith("enc1:")) {
     if (!encryptionAvailable()) {
@@ -102,7 +113,7 @@ export function setupSync(opts: SetupOptions = {}): SetupResult {
   } else {
     const encrypted = encryptSecret(key.toString("base64"));
     if (!encrypted) {
-      throw new Error("safeStorage is unavailable (CLI). Re-run with --passphrase or set MEMORIA_SYNC_PASSPHRASE.");
+      throw new Error("No OS keychain is available. Re-run with --passphrase or set MEMORIA_SYNC_PASSPHRASE.");
     }
     setSetting(KEY_SETTING, encrypted);
   }

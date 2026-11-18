@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, Notification, globalShortcut } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage, Notification, globalShortcut, session } from "electron";
+import { getApiToken, TOKEN_COOKIE } from "../engine/auth";
 import * as path from "node:path";
 import { getConfig } from "../engine/config";
 import { ensureDb, scanAll } from "../engine/ingest/manager";
@@ -176,6 +177,20 @@ app.whenReady().then(async () => {
   ensureDb();
   // Tunggu server siap dulu — semua window memuat UI dari HTTP server ini.
   await startHttpServer();
+  // The local API requires a token: hand it to every window through an
+  // HttpOnly cookie on the default session, so no page script ever sees it.
+  try {
+    await session.defaultSession.cookies.set({
+      url: dashboardUrl(),
+      name: TOKEN_COOKIE,
+      value: getApiToken(),
+      httpOnly: true,
+      sameSite: "strict",
+      expirationDate: Math.floor(Date.now() / 1000) + 365 * 86400,
+    });
+  } catch (err) {
+    console.warn("[memoria] could not set API token cookie:", err);
+  }
   startWatcher();
   createTray();
   registerShortcuts();

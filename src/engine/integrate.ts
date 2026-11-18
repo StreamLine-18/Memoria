@@ -197,6 +197,40 @@ function antigravityTarget(): ToolTarget {
 function httpUrl(): string {
   return `http://127.0.0.1:${getConfig().httpPort}/mcp`;
 }
+/** Header for MCP over HTTP: the local API requires the token (auth.ts). */
+function httpHeaders(): Record<string, string> {
+  const { getApiToken, TOKEN_HEADER } = require("./auth") as typeof import("./auth");
+  return { [TOKEN_HEADER]: getApiToken() };
+}
+
+/** Existing Cursor / VS Code entries that point at our HTTP bridge get the
+ * token header added on startup, so enabling the token does not break them.
+ * Only rewrites an entry that already exists and targets this port. */
+export function refreshHttpIntegrations(): string[] {
+  const fixed: string[] = [];
+  const targets: Array<{ name: string; file: string; section: string }> = [
+    { name: "cursor", file: path.join(home(), ".cursor", "mcp.json"), section: "mcpServers" },
+    { name: "vscode", file: path.join(home(), ".vscode", "mcp.json"), section: "servers" },
+  ];
+  for (const t of targets) {
+    if (!fs.existsSync(t.file)) continue;
+    let cfg: Record<string, any>;
+    try {
+      cfg = JSON.parse(fs.readFileSync(t.file, "utf8"));
+    } catch {
+      continue;
+    }
+    const entry = cfg?.[t.section]?.memoria;
+    if (!entry || entry.url !== httpUrl()) continue;
+    const want = httpHeaders();
+    const have = entry.headers || {};
+    if (Object.keys(want).every((k) => have[k] === want[k])) continue;
+    entry.headers = { ...have, ...want };
+    fs.writeFileSync(t.file, JSON.stringify(cfg, null, 2), "utf8");
+    fixed.push(t.name);
+  }
+  return fixed;
+}
 
 function mergeJsonConfig(cfgPath: string, apply: (cfg: Record<string, any>) => void): string {
   fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
@@ -242,7 +276,7 @@ function cursorTarget(): ToolTarget {
       mergeJsonConfig(cfgPath(), (cfg) => {
         cfg.mcpServers = cfg.mcpServers || {};
         // HTTP bridge (docs Cursor: server remote = field "url")
-        cfg.mcpServers["memoria"] = { url: httpUrl() };
+        cfg.mcpServers["memoria"] = { url: httpUrl(), headers: httpHeaders() };
       }),
   };
 }
@@ -273,7 +307,7 @@ function vscodeTarget(): ToolTarget {
       mergeJsonConfig(cfgPath(), (cfg) => {
         cfg.servers = cfg.servers || {};
         // docs VS Code: server remote = { "type": "http", "url": ... }
-        cfg.servers["memoria"] = { type: "http", url: httpUrl() };
+        cfg.servers["memoria"] = { type: "http", url: httpUrl(), headers: httpHeaders() };
       }),
   };
 }
