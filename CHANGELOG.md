@@ -106,6 +106,16 @@ kehilangan data di capture dan redaksi secret.
 - Set evaluasi berlabel + `npm run eval:heuristic` (active precision, memori
   bertahan, noise terbuang); dijaga di test suite.
 
+- **Progressive disclosure di MCP**: `project_context` default mode `index`
+  (satu baris per memori + id; memori pendek dan project brief tetap utuh),
+  tool baru `get_memory(ids)` untuk teks penuh, `recall` menerima
+  `mode: "index"`. Hasil `recall` kini menyertakan id.
+- **Metrik konteks lokal** (`retrieve/usage.ts`): setiap pengiriman konteks
+  (recall, project_context, build_context, get_memory, blok resume) dicatat
+  di `continuity_events`; `/api/continuity` mengembalikan `usage7d`. Kartu
+  Overview baru menampilkan jumlah permintaan, blok resume, perkiraan token
+  yang dikirim, dan token yang dihemat oleh mode indeks.
+
 ### Changed
 - `maintain heuristic-promote` kini menjalankan auto-triage penuh.
 - Server lokal menolak `Origin` asing untuk semua method (dulu hanya non-GET);
