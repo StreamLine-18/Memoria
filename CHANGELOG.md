@@ -50,6 +50,8 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.13.2] — 2026-11-18 — Intel Macs
+
 ### Added
 - macOS Intel (x64) installers next to Apple Silicon (arm64): `Memoria-<version>-x64.dmg` / `.zip`.
 
