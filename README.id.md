@@ -135,11 +135,16 @@ flowchart TB
 
 ### 1 · Instal
 
+Unduh dari [rilis terbaru](https://github.com/xinzzu/Memoria/releases/latest):
+
 | OS | Paket |
 |---|---|
-| Windows | `Memoria Setup 0.13.1.exe` dari [Releases](https://github.com/xinzzu/Memoria/releases) |
-| Linux | `memoria_0.13.1_amd64.deb` (`sudo dpkg -i`) atau `Memoria-0.13.1.AppImage` |
-| macOS | `Memoria-0.13.1.dmg` (seret ke Applications; klik kanan → Open jika digate) |
+| Windows | `Memoria-Setup-<versi>.exe` |
+| Linux | `memoria_<versi>_amd64.deb` (`sudo dpkg -i`) atau `Memoria-<versi>.AppImage` |
+| macOS (Apple Silicon) | `Memoria-<versi>-arm64.dmg` |
+| macOS (Intel) | `Memoria-<versi>-x64.dmg` |
+
+Build macOS belum dinotarisasi: seret ke Applications, lalu klik kanan → Open saat pertama kali dibuka.
 
 **Headless / CLI (server, WSL, devcontainer)** — tanpa Electron, butuh Node.js 22.5 atau lebih baru:
 

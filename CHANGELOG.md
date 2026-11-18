@@ -50,6 +50,12 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Added
+- macOS Intel (x64) installers next to Apple Silicon (arm64): `Memoria-<version>-x64.dmg` / `.zip`.
+
+### Changed
+- Installer file names are predictable: `Memoria-Setup-<version>.exe` (was `Memoria Setup <version>.exe`, which GitHub renamed to `Memoria.Setup.<version>.exe`) and `Memoria-<version>-<arch>.dmg`. The README install table links to the latest release instead of hard-coding a version.
+
 ## [0.13.1] — 2026-11-18 — First CI-published npm release
 
 Same code as 0.13.0. This is the first release published to npm from GitHub Actions via trusted publishing (0.13.0 was published manually to create the package), and the first release with installers since 0.12.0. All changes are listed under 0.13.0 below.
