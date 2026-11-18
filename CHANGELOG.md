@@ -50,81 +50,82 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
-**Tier 0 tanpa approval manual.** Draft heuristik kini di-triage otomatis
-(noise/duplikat → arsip, sinyal kuat/terkonfirmasi → active), plus perbaikan
-kehilangan data di capture dan redaksi secret.
+**Tier 0 without manual approval.** Heuristic drafts are now triaged
+automatically (noise/duplicates → archive, strong or corroborated signals →
+active), plus a capture data-loss fix, secret redaction, progressive context
+disclosure for agents, and capture exclusions.
 
 ### Fixed
-- **CRITICAL — capture masih kehilangan pesan**: `seqAllocator` (perbaikan
-  0.11.0) mengembalikan `n++` pada salinan lokal, jadi semua pesan satu sesi
-  dalam satu scan mendapat seq yang sama dan `INSERT OR IGNORE` membuang
-  semuanya kecuali yang pertama. Di satu DB nyata, 13 dari 35 sesi Claude
-  tersimpan tanpa pesan sama sekali. Migrasi **v9** me-reset offset sumber
-  claude/codex/opencode/vscdb agar scan berikutnya membaca ulang;
-  `insertTranscript` menolak pesan yang sudah ada (sesi + ts + konten), jadi
-  pembacaan ulang tidak menggandakan data.
-- **Secret terenkripsi tidak bisa dibaca**: `decryptSecret` hanya mendekode
-  base64 tanpa `safeStorage.decryptString`, sehingga API key OpenAI-compatible
-  dan URL/token webhook terbaca sebagai byte ciphertext di app Electron.
-- **Output tool tercatat sebagai ucapan user**: `tool_result` Claude Code
-  (bertipe `user` di jsonl) kini disimpan dengan role `tool`, pesan `isMeta`
-  sebagai `system`, dan tag suntikan IDE/CLI (`<system-reminder>`,
-  `<ide_opened_file>`, `<command-*>`) dibuang. Dulu output shell malah dapat
-  bobot +0.08 sebagai "pesan user" di ekstraksi heuristik.
-- MCP server melaporkan versi dari `package.json` (dulu `0.1.0`).
+- **CRITICAL — capture was still losing messages**: `seqAllocator` (the
+  0.11.0 fix) returned `n++` on a local copy, so every message of a session in
+  one scan pass got the same seq and `INSERT OR IGNORE` dropped all but the
+  first. On one real database, 13 of 35 Claude sessions were stored with no
+  messages at all. Migration **v9** resets claude/codex/opencode/vscdb source
+  offsets so the next scan re-reads them; `insertTranscript` skips messages
+  that already exist (same session + timestamp + content), so the re-read does
+  not duplicate data.
+- **Encrypted secrets could not be read**: `decryptSecret` only base64-decoded
+  the value without calling `safeStorage.decryptString`, so OpenAI-compatible
+  API keys and webhook URLs/tokens came back as ciphertext bytes in the
+  Electron app.
+- **Tool output was stored as user speech**: Claude Code `tool_result` entries
+  (typed `user` in the jsonl) are now stored with role `tool`, `isMeta`
+  messages as `system`, and IDE/CLI injected tags (`<system-reminder>`,
+  `<ide_opened_file>`, `<command-*>`) are stripped. Previously shell output
+  even received the +0.08 "user message" bonus in heuristic extraction.
+- The MCP server reports the version from `package.json` (was `0.1.0`).
 
 ### Added
-- **Auto-triage Tier 0** (`extract/triage.ts`): setiap draft heuristik
-  diputuskan active / archive / tetap draft dengan alasan tercatat; berjalan
-  saat startup dan harian (`autoTriage`, default on); draft yang tetap ragu
-  diarsip setelah `draftTtlDays` (default 14). Semua perubahan dicatat per
-  batch di `triage_log` dan bisa di-undo. Di DB nyata: 4.153 draft → 3,
-  dengan ±400 dipromosikan.
-- **Filter noise** (`extract/noise.ts`): tabel aturan untuk echo tool, output
-  shell (`ls`/`ps`/`grep -n`), log build, kode/path/URL lepas, narasi dan
-  tawaran agen. Dijalankan sebelum kuota kandidat per window terisi.
-- **Skor triage** (`triageCandidate`): keputusan/task eksplisit dapat bonus
-  sinyal kuat, kalimat deskriptif yang kebetulan memuat "memakai"/"nanti"
-  tidak; pertanyaan dan fragmen yang bergantung konteks diberi penalti.
-  Kandidat `archive` tidak disimpan sama sekali. Batas promosi per sesi
-  menyesuaikan panjang sesi (dulu tetap 8).
-- **Corroboration**: draft yang muncul lagi di sesi atau tool lain
-  dipromosikan otomatis.
-- **Redaksi secret** (`privacy/redact.ts`) di `insertTranscript`,
-  `insertMemory`, `updateMemory`: token OpenAI/Anthropic/GitHub/GitLab/AWS/
-  Google/Slack/Stripe/HF/npm, webhook Discord/Slack, bot Telegram, JWT,
-  private key PEM, password di connection string, bearer token,
-  `NAMA_SECRET=nilai`, dan blok `<private>…</private>`. Migrasi **v8**
-  meredaksi data lama.
-- Dashboard: tombol **Auto-triage** (pratinjau jumlah + alasan sebelum
-  diterapkan), **Undo last triage**, inbox berkelompok proyek × jenis dengan
-  *Approve all* / *Archive all*, baris status triage/redaksi, toggle Settings.
+- **Tier 0 auto-triage** (`extract/triage.ts`): every heuristic draft is
+  decided as active / archive / keep with a recorded reason. Runs at startup
+  and daily (`autoTriage`, on by default); drafts that stay uncertain are
+  archived after `draftTtlDays` (default 14). Every change is logged per batch
+  in `triage_log` and can be undone. On a real database: 4,153 drafts → 3,
+  with about 400 promoted.
+- **Noise filter** (`extract/noise.ts`): a rule table for tool echoes, shell
+  output (`ls`/`ps`/`grep -n`), build logs, bare code/paths/URLs, and agent
+  narration or offers. Applied before the per-window candidate quota fills up.
+- **Triage score** (`triageCandidate`): explicit decisions and tasks get the
+  strong-signal bonus, descriptive sentences that merely contain words like
+  "use"/"later" do not; questions and context-dependent fragments are
+  penalised. `archive` candidates are not stored at all. The per-session
+  promotion cap scales with session length (was a fixed 8).
+- **Corroboration**: a draft that appears again in another session or tool is
+  promoted automatically.
+- **Secret redaction** (`privacy/redact.ts`) in `insertTranscript`,
+  `insertMemory`, and `updateMemory`: OpenAI/Anthropic/GitHub/GitLab/AWS/
+  Google/Slack/Stripe/Hugging Face/npm tokens, Discord/Slack webhooks,
+  Telegram bot tokens, JWTs, PEM private keys, connection-string passwords,
+  bearer tokens, `SECRET_NAME=value` assignments, and `<private>…</private>`
+  blocks. Migration **v8** redacts existing data.
+- **Progressive disclosure in MCP**: `project_context` defaults to mode
+  `index` (one line per memory with its id; short memories and the project
+  brief stay whole), new tool `get_memory(ids)` returns full text, and
+  `recall` accepts `mode: "index"`. `recall` results now include ids.
+- **Local context metrics** (`retrieve/usage.ts`): every context delivery
+  (recall, project_context, build_context, get_memory, resume block) is
+  recorded in `continuity_events`; `/api/continuity` returns `usage7d`.
+- **Capture exclusions**: Settings → "Never capture these projects"
+  (`captureExclude`). One entry per line: a folder path (prefix, including
+  subfolders, `~` supported) or a project name/slug. Transcripts from matching
+  projects are never stored. Applies to new captures.
+- Dashboard: **Auto-triage** button (preview counts and reasons before
+  applying), **Undo last triage**, draft inbox grouped by project × kind with
+  *Approve all* / *Archive all*, triage/redaction status line, Settings toggle,
+  and an Overview card for context delivered and tokens saved by the index.
 - API: `GET/POST /api/triage`, `POST /api/triage/undo`,
   `GET /api/drafts/groups`, `GET /api/privacy`.
-- CLI: `maintain triage [--apply|--undo]`, `memoria help`; entri `bin` +
-  shebang untuk `npx`/install global (mode headless = `memoria server`).
-- Set evaluasi berlabel + `npm run eval:heuristic` (active precision, memori
-  bertahan, noise terbuang); dijaga di test suite.
-
-- **Progressive disclosure di MCP**: `project_context` default mode `index`
-  (satu baris per memori + id; memori pendek dan project brief tetap utuh),
-  tool baru `get_memory(ids)` untuk teks penuh, `recall` menerima
-  `mode: "index"`. Hasil `recall` kini menyertakan id.
-- **Metrik konteks lokal** (`retrieve/usage.ts`): setiap pengiriman konteks
-  (recall, project_context, build_context, get_memory, blok resume) dicatat
-  di `continuity_events`; `/api/continuity` mengembalikan `usage7d`. Kartu
-  Overview baru menampilkan jumlah permintaan, blok resume, perkiraan token
-  yang dikirim, dan token yang dihemat oleh mode indeks.
-
-- **Pengecualian capture**: Settings → "Never capture these projects"
-  (setting `captureExclude`). Satu entri per baris, berupa path folder
-  (prefix, termasuk subfolder, `~` didukung) atau nama/slug proyek.
-  Transkrip proyek yang cocok tidak disimpan. Berlaku untuk capture baru.
+- CLI: `maintain triage [--apply|--undo]`, `memoria help`; `bin` entry and
+  shebang for `npx`/global install (headless mode = `memoria server`).
+- Labelled evaluation set + `npm run eval:heuristic` (active precision,
+  memories kept, noise removed), enforced in the test suite.
 
 ### Changed
-- `maintain heuristic-promote` kini menjalankan auto-triage penuh.
-- Server lokal menolak `Origin` asing untuk semua method (dulu hanya non-GET);
-  token API dibandingkan constant-time.
+- `maintain heuristic-promote` now runs the full auto-triage.
+- The local server rejects foreign `Origin` headers for every method (was
+  non-GET only); the API token is compared in constant time.
+- `project_context` returns a compact index by default; pass `mode: "full"`
+  for the previous output.
 
 ## [0.12.0] — 2026-11-16 — Heuristic Continuity
 
