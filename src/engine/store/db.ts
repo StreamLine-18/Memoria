@@ -1197,6 +1197,7 @@ export function seqAllocator(tool: string): (sessionId: string) => number {
 export function insertTranscript(t: Transcript): boolean {
   const d = getDb();
   try {
+    if (isProjectExcluded(t.projectId)) return false;
     const content = scrub(t.content);
     // Tolak pesan yang sudah ada (sesi + timestamp sama, konten setara).
     // Dibutuhkan untuk re-scan pemulihan (m9) dan aman untuk scan normal:
@@ -1272,6 +1273,51 @@ export function bumpDataVersion(): void {
 }
 export function getDataVersion(): number {
   return dataVersion;
+}
+
+/* ---------- Pengecualian capture (privasi) ----------
+ * Setting `captureExclude`: satu entri per baris — path folder (prefix,
+ * `~` didukung) atau nama/slug proyek. Transkrip proyek yang cocok tidak
+ * pernah disimpan. Baris diawali `#` = komentar. Cache per nilai setting. */
+let exclusionCache: { raw: string; entries: string[]; byProject: Map<number, boolean> } | null = null;
+
+function exclusionEntries(): { entries: string[]; byProject: Map<number, boolean> } {
+  const raw = getSetting("captureExclude", "");
+  if (exclusionCache && exclusionCache.raw === raw) return exclusionCache;
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  const entries = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"))
+    .map((l) => (l.startsWith("~") ? home + l.slice(1) : l))
+    // Path dikanonikkan sama seperti path proyek (realpath + lowercase di
+    // Windows), mis. /tmp → /private/tmp di macOS.
+    .map((l) => (/[\\/]/.test(l) ? canonicalPath(l) || l : l))
+    .map((l) => (process.platform === "win32" ? l.toLowerCase() : l).replace(/[\\/]+$/, ""));
+  exclusionCache = { raw, entries, byProject: new Map() };
+  return exclusionCache;
+}
+
+export function isProjectExcluded(projectId: number | null | undefined): boolean {
+  if (projectId == null) return false;
+  const c = exclusionEntries();
+  if (!c.entries.length) return false;
+  const hit = c.byProject.get(projectId);
+  if (hit !== undefined) return hit;
+  const p = getDb().prepare("SELECT slug, name, path FROM projects WHERE id = ?").get(projectId) as
+    | { slug: string; name: string | null; path: string | null }
+    | undefined;
+  let excluded = false;
+  if (p) {
+    const pp = p.path ? (process.platform === "win32" ? p.path.toLowerCase() : p.path) : "";
+    excluded = c.entries.some((e) => {
+      if (/[\\/]/.test(e)) return !!pp && (pp === e || pp.startsWith(e + "/") || pp.startsWith(e + "\\"));
+      const el = e.toLowerCase();
+      return p.slug.toLowerCase() === el || (p.name || "").toLowerCase() === el;
+    });
+  }
+  c.byProject.set(projectId, excluded);
+  return excluded;
 }
 
 /** Redaksi secret di titik masuk data + catat jumlahnya (privacy report). */

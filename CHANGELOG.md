@@ -116,6 +116,11 @@ kehilangan data di capture dan redaksi secret.
   Overview baru menampilkan jumlah permintaan, blok resume, perkiraan token
   yang dikirim, dan token yang dihemat oleh mode indeks.
 
+- **Pengecualian capture**: Settings → "Never capture these projects"
+  (setting `captureExclude`). Satu entri per baris, berupa path folder
+  (prefix, termasuk subfolder, `~` didukung) atau nama/slug proyek.
+  Transkrip proyek yang cocok tidak disimpan. Berlaku untuk capture baru.
+
 ### Changed
 - `maintain heuristic-promote` kini menjalankan auto-triage penuh.
 - Server lokal menolak `Origin` asing untuk semua method (dulu hanya non-GET);
