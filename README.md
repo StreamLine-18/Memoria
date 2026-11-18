@@ -107,7 +107,7 @@ flowchart TB
 | ⏸️ **Resume engine** | A SESSION RESUME block auto-injected into AGENTS.md / CLAUDE.md / GEMINI.md: open tasks, locked decisions, current branch, dirty files |
 | ⚡ **Pre-limit trigger** | The moment your AI tool reports a usage limit, Memoria captures a work snapshot (files, commands, git state) and injects the resume block **immediately** — before you're kicked out |
 | 🧩 **MCP bridge — one URL, every tool** | MCP over HTTP at `http://127.0.0.1:48210/mcp` + one-click registration into 12 clients (Claude Code/Desktop, Codex, Gemini, opencode, Copilot CLI, Antigravity, Cursor, Windsurf, VS Code, Cline, Zed) |
-| 🤖 **Self-editing memory** | Agents don't just read the brain — they curate it: `recall` (project-scoped, token budget), `remember` (ADD/UPDATE/NOOP decisions), `update_memory`, `forget`, `build_context` |
+| 🤖 **Self-editing memory** | Agents don't just read the brain — they curate it: `recall` (project-scoped, token budget), `remember` (ADD/UPDATE/NOOP decisions), `update_memory`, `forget`, `build_context`, `file_context` (what is known about a file before editing it) |
 | ✅ **Tasks view** | Every task your AI sessions promised, in one checkable board |
 | 🧠 **Tiered intelligence** | Works with **no model at all** (heuristics + automatic triage, no manual approval), with Ollama, or any OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
 | 🔍 **Hybrid retrieval** | Keyword (FTS5 trigram) + embeddings + graph centrality, fuzzy-tolerant — measured on a reproducible benchmark: **hit@5 92.8–100%** with zero LLM calls |
@@ -192,10 +192,13 @@ Then start a new session and tell your agent:
 Recall the decisions from previous sessions in this project.
 ```
 
-**Seven MCP tools** ship out of the box: `recall` (project-scoped, token budget),
+**Nine MCP tools** ship out of the box: `recall` (project-scoped, token budget),
 `remember` (ADD/UPDATE/NOOP smart decisions), `update_memory`, `forget`,
-`related`, `project_context`, and `build_context` (one ready-to-paste context
-block with a character budget).
+`related`, `project_context` (compact index by default), `get_memory` (full text
+for selected ids), `file_context` (fixed errors, decisions and open tasks that
+mention a file), and `build_context` (one ready-to-paste context block with a
+character budget). When a newer decision replaces an older one about the same
+subject, the old one is marked superseded and drops out of the resume block.
 
 ### 4 · CLI
 

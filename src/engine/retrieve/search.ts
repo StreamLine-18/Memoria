@@ -11,6 +11,9 @@ export interface SearchHit {
   sourceTool: string;
   projectSlug: string | null;
   score: number;
+  /** Set when a newer decision about the same subject replaced this one
+   * (valid_to closed while the memory is still active). */
+  superseded?: boolean;
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -167,7 +170,9 @@ export function searchMemories(
         createdAt: m.createdAt,
         sourceTool: m.sourceTool,
         projectSlug: projectSlugById(m.projectId),
-        score,
+        // Superseded decisions stay searchable (history) but rank lower.
+        score: (m.validTo || 0) > 0 ? score * 0.6 : score,
+        superseded: (m.validTo || 0) > 0,
       });
     }
   }
@@ -211,6 +216,8 @@ export function projectContext(projectSlug: string, limit = 8): SearchHit[] {
   const hits: SearchHit[] = [];
   for (const m of memories) {
     if (projectSlugById(m.projectId) !== projectSlug) continue;
+    // Project context = what is true now: skip superseded decisions.
+    if ((m.validTo || 0) > 0) continue;
     const ageDays = (now - m.createdAt) / 86400000;
     const recency = Math.exp(-ageDays / 14);
     const score = m.importance * 0.7 + recency * 0.3;

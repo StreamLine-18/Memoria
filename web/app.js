@@ -101,6 +101,7 @@ function memoRowRenderer(renderId) {
         <div class="mem-meta">
           <span class="mem-kind kind-${h.kind}">${t(KIND_LABEL[h.kind] || h.kind)}</span>
           ${h.status === "draft" ? '<span class="mem-kind" style="opacity:.7">Draft</span>' : ""}
+          ${!isArchived && h.kind === "decision" && h.validTo > 0 ? `<span class="mem-kind" style="opacity:.7" title="${esc(t("A newer decision about the same subject replaced this one"))}">${esc(t("Superseded"))}</span>` : ""}
           <span class="sep">·</span>
           <span>${esc(prettySlug(h.projectSlug))}</span>
           <span class="sep">·</span>
@@ -115,6 +116,7 @@ function memoRowRenderer(renderId) {
       <div class="mem-actions">
         ${isDraft ? `<button class="mem-approve" title="${t("Approve memory")}" data-appr="${h.id}">Approve ✓</button>` : ""}
         ${isArchived ? `<button class="mem-approve" title="${t("Restore memory")}" data-rs="${h.id}">Restore</button>` : ""}
+        ${!isArchived && h.kind === "decision" && h.validTo > 0 ? `<button class="mem-approve" title="${esc(t("Mark this decision as current again"))}" data-cur="${h.id}">${esc(t("Still current"))}</button>` : ""}
         <button class="icon-btn" title="${t("View connections")}" data-rel="${h.id}">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="4" r="1.6"/><circle cx="12.5" cy="3" r="1.6"/><circle cx="10" cy="11" r="1.6"/><path d="M5 4.8l5.8-1.2M3.7 5.6l1 4.3M9.2 10l1-7.4"/></svg>
         </button>
@@ -872,6 +874,18 @@ async function onMemListClick(e) {
   if (goto) {
     e.stopPropagation();
     openEditModal(Number(goto.dataset.goto));
+    return;
+  }
+  const cur = e.target.closest("[data-cur]");
+  if (cur) {
+    e.stopPropagation();
+    try {
+      await api("/api/decisions/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: Number(cur.dataset.cur) }) });
+      toast(t("Decision marked as current"));
+      renderMemories();
+    } catch (err) {
+      toast(t("Failed: ") + err.message, "err");
+    }
     return;
   }
   const del = e.target.closest("[data-del]");

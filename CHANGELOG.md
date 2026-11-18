@@ -105,6 +105,20 @@ disclosure for agents, and capture exclusions.
 - **Local context metrics** (`retrieve/usage.ts`): every context delivery
   (recall, project_context, build_context, get_memory, resume block) is
   recorded in `continuity_events`; `/api/continuity` returns `usage7d`.
+- **`file_context` MCP tool** (`retrieve/filecontext.ts`, `GET /api/file-context`):
+  active memories that mention a file path, matched on trailing path segments
+  (`src/engine/http.ts` matches `/abs/repo/src/engine/http.ts`, not
+  `myhttp.tsx`). Generic names (`page.tsx`, `index.ts`) need two segments or a
+  project scope. Ordered by specificity, then fixed errors, decisions, tasks.
+- **Superseded decisions** (`extract/supersede.ts`, migration **v10**): when
+  a new active decision shares a subject (tech word, package, path, command)
+  with an older decision in the same project and overlaps in the "same topic,
+  different content" band, the old one gets `superseded_by` + `valid_to`. It
+  stays searchable (flagged and ranked lower in `recall`) but leaves the
+  resume block, `project_context`, and `build_context`. Dashboard shows a
+  *Superseded* badge with *Still current* to undo (`POST /api/decisions/restore`).
+  Deliberately conservative: on one real database it flagged 0 of 144
+  decisions.
 - **Capture exclusions**: Settings → "Never capture these projects"
   (`captureExclude`). One entry per line: a folder path (prefix, including
   subfolders, `~` supported) or a project name/slug. Transcripts from matching
