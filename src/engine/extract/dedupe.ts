@@ -148,8 +148,18 @@ export function addMemoryWithDedupe(m: Memory): DedupeResult {
   }
   const newId = insertMemory(m);
   if (newId != null) linkNew(newId);
+  if (newId != null && m.kind === "decision" && (m.status || "active") === "active") markSuperseded(newId);
   emitEvent("memory", { kind: m.kind });
   return { inserted: true };
+}
+
+function markSuperseded(id: number): void {
+  try {
+    const { supersedeOlderDecisions } = require("./supersede") as typeof import("./supersede");
+    supersedeOlderDecisions(id);
+  } catch {
+    // optional: a failure here must not block storing the memory
+  }
 }
 
 function linkNew(id: number): void {

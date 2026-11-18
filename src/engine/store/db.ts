@@ -181,7 +181,18 @@ const MIGRATIONS: Migration[] = [
   { version: 7, name: "audit-indexes", up: m7AuditIndexes },
   { version: 8, name: "redact-secrets-triage-log", up: m8RedactAndTriage },
   { version: 9, name: "recover-seq-collision-loss", up: m9RecoverSeqLoss },
+  { version: 10, name: "superseded-decisions", up: m10SupersededBy },
 ];
+
+/** M10: a newer decision about the same subject closes the old one's
+ * validity window (valid_to) and records itself in superseded_by. Kept on
+ * the row because memory_links are undirected and rebuilt from scratch. */
+function m10SupersededBy(d: DatabaseSync): void {
+  d.exec(`
+    ALTER TABLE memories ADD COLUMN superseded_by INTEGER DEFAULT 0;
+    CREATE INDEX IF NOT EXISTS idx_memories_superseded ON memories(superseded_by);
+  `);
+}
 
 /** M9: pulihkan pesan yang terbuang oleh tabrakan seq (seqAllocator lama dan
  * pendahulunya memberi seq sama untuk banyak pesan satu sesi → INSERT OR
@@ -1470,7 +1481,16 @@ export function approveMemory(id: number): boolean {
   const res = getDb()
     .prepare("UPDATE memories SET status = 'active', updated_at = ?, updated_by = ? WHERE id = ?")
     .run(Date.now(), getDeviceId(), id);
-  if (res.changes > 0) enqueueMemorySnapshot(id);
+  if (res.changes > 0) {
+    enqueueMemorySnapshot(id);
+    // A decision that becomes active may replace an older one.
+    try {
+      const { supersedeOlderDecisions } = require("../extract/supersede") as typeof import("../extract/supersede");
+      supersedeOlderDecisions(id);
+    } catch {
+      /* optional */
+    }
+  }
   return res.changes > 0;
 }
 

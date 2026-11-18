@@ -120,6 +120,7 @@ export async function collectResumeData(slug: string, opts: { slim?: boolean } =
     .prepare(
       `SELECT content, importance FROM memories
        WHERE project_id = ? AND kind = 'decision' AND archived = 0 AND status = 'active'
+         AND COALESCE(superseded_by, 0) = 0
        ORDER BY created_at DESC LIMIT ${maxDecisions}`
     )
     .all(proj.id) as Array<{ content: string; importance: number }>;

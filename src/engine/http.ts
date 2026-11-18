@@ -520,6 +520,17 @@ export function startHttpServer(): Promise<void> {
           groups.get(key)!.ids.push(r.id);
         }
         sendJson(res, 200, { groups: [...groups.values()].sort((a, b) => b.ids.length - a.ids.length), total: rows.length });
+      } else if (url.pathname === "/api/file-context" && req.method === "GET") {
+        const { fileContext } = await import("./retrieve/filecontext");
+        const p = url.searchParams.get("path") || "";
+        sendJson(res, 200, { path: p, memories: p ? fileContext(p, { project: url.searchParams.get("project") || undefined }) : [] });
+      } else if (url.pathname === "/api/decisions/restore" && req.method === "POST") {
+        // Undo a supersession: the decision becomes current again.
+        const body = await readBody(req);
+        const { restoreDecision } = await import("./extract/supersede");
+        const ok = restoreDecision(Number(body.id || 0));
+        if (ok) emitEvent("memory", { kind: "decision" });
+        sendJson(res, ok ? 200 : 404, { ok });
       } else if (url.pathname === "/api/privacy" && req.method === "GET") {
         // Privacy report: apa yang ditangkap & berapa secret yang disensor.
         const d = getDb();

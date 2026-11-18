@@ -14,6 +14,7 @@ import { addMemoryWithDedupe } from "../extract/dedupe";
 import { buildContextBlock } from "../retrieve/contextblock";
 import { emitEvent } from "../events";
 import { recordContextServed } from "../retrieve/usage";
+import { fileContext } from "../retrieve/filecontext";
 
 const TOOL_DESC = `
 You have access to persistent memory (a second brain) from every AI coding tool the user has used (Claude, Codex, opencode, Gemini, Copilot, Antigravity).
@@ -92,6 +93,20 @@ export function createMcpServer(): Server {
             mode: { type: "string", enum: ["index", "full"], default: "index" },
           },
           required: ["project"],
+        },
+      },
+      {
+        name: "file_context",
+        description:
+          "Before editing a file, ask what is known about it: fixed errors, decisions, open tasks and preferences that mention this file path. Pass an absolute or relative path.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path, e.g. src/engine/http.ts" },
+            project: { type: "string", description: "Optional — limit to one project (path or name)" },
+            limit: { type: "number", default: 8 },
+          },
+          required: ["path"],
         },
       },
       {
@@ -212,7 +227,7 @@ export function createMcpServer(): Server {
         const full = results
           .map(
             (r) =>
-              `[${r.kind}] (id ${r.id}, ${r.projectSlug ?? "global"}, ${r.sourceTool}, importance ${r.importance.toFixed(2)})\n${r.content}`
+              `[${r.kind}] (id ${r.id}, ${r.projectSlug ?? "global"}, ${r.sourceTool}, importance ${r.importance.toFixed(2)}${r.superseded ? ", SUPERSEDED by a newer decision" : ""})\n${r.content}`
           )
           .join("\n\n");
         if (a.mode === "index") {
@@ -272,6 +287,17 @@ export function createMcpServer(): Server {
         const idx = indexText(results);
         recordContextServed("project_context", proj?.id ?? null, idx.length, full.length);
         return { content: [{ type: "text", text: idx }] };
+      }
+      case "file_context": {
+        const p = String(a.path || "").trim();
+        if (!p) return { content: [{ type: "text", text: "path is required." }] };
+        const hits = fileContext(p, { project: a.project ? String(a.project) : undefined, limit: Number(a.limit || 8) });
+        if (!hits.length) {
+          return { content: [{ type: "text", text: `No memories mention ${p}.` }] };
+        }
+        const text = `Known about ${p}:\n` + hits.map((h) => `- #${h.id} [${h.kind}] ${h.content.replace(/\s+/g, " ")}`).join("\n");
+        recordContextServed("file_context", hits[0].projectId, text.length);
+        return { content: [{ type: "text", text }] };
       }
       case "get_memory": {
         const ids = (Array.isArray(a.ids) ? a.ids : [a.ids])

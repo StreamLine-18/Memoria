@@ -107,7 +107,7 @@ flowchart TB
 | ⏸️ **Resume engine** | Blok SESSION RESUME otomatis di AGENTS.md / CLAUDE.md / GEMINI.md: tugas terbuka, keputusan terkunci, branch, file kotor |
 | ⚡ **Trigger pre-limit** | Begitu tool AI melaporkan limit, snapshot kerja ditangkap dan blok resume diinjeksi **seketika** — sebelum kamu ditendang |
 | 🧩 **MCP bridge — satu URL, semua tool** | MCP over HTTP di `http://127.0.0.1:48210/mcp` + registrasi satu klik ke 12 klien (Claude Code/Desktop, Codex, Gemini, opencode, Copilot CLI, Antigravity, Cursor, Windsurf, VS Code, Cline, Zed) |
-| 🤖 **Memori yang bisa dikurasi agen** | 7 tool MCP: `recall` (scope proyek + budget token), `remember` (keputusan ADD/UPDATE/NOOP), `update_memory`, `forget`, `build_context` |
+| 🤖 **Memori yang bisa dikurasi agen** | 9 tool MCP: `recall` (scope proyek + budget token), `remember` (keputusan ADD/UPDATE/NOOP), `update_memory`, `forget`, `build_context`, `file_context` (apa yang diketahui tentang sebuah file sebelum diedit) |
 | ✅ **Tab Tasks** | Semua janji/tugas dari sesi AI dalam satu checklist |
 | 🧠 **Tiered intelligence** | Jalan **tanpa model** (heuristik + triage otomatis, tanpa approval manual), dengan Ollama, atau endpoint OpenAI-compatible (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
 | 🔍 **Retrieval hibrid** | Keyword (FTS5 trigram) + embedding + graph centrality, toleran typo — terukur pada benchmark reproducible: **hit@5 92.8–100%** tanpa satu pun panggilan LLM |
@@ -182,9 +182,13 @@ Mau tanpa edit config? Semua klien MCP-capable bisa langsung menunjuk HTTP bridg
 url: http://127.0.0.1:48210/mcp
 ```
 
-**7 tool MCP** siap pakai: `recall` (scope proyek + budget token), `remember` (keputusan
-ADD/UPDATE/NOOP), `update_memory`, `forget`, `related`, `project_context`, dan
-`build_context` (satu blok konteks siap-tempel dengan budget karakter).
+**9 tool MCP** siap pakai: `recall` (scope proyek + budget token), `remember` (keputusan
+ADD/UPDATE/NOOP), `update_memory`, `forget`, `related`, `project_context` (indeks ringkas
+secara bawaan), `get_memory` (teks penuh untuk id tertentu), `file_context` (error yang
+pernah diperbaiki, keputusan, dan task terbuka yang menyebut sebuah file), dan
+`build_context` (satu blok konteks siap-tempel dengan budget karakter). Keputusan lama
+yang digantikan keputusan baru tentang hal yang sama ditandai usang dan tidak lagi masuk
+blok resume.
 
 Lalu mulai sesi baru dan minta agen Anda:
 
