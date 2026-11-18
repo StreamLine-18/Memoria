@@ -135,11 +135,16 @@ flowchart TB
 
 ### 1 · Install
 
+Download from the [latest release](https://github.com/xinzzu/Memoria/releases/latest):
+
 | OS | Package |
 |---|---|
-| Windows | `Memoria Setup 0.13.1.exe` from [Releases](https://github.com/xinzzu/Memoria/releases) |
-| Linux | `memoria_0.13.1_amd64.deb` (`sudo dpkg -i`) or `Memoria-0.13.1.AppImage` |
-| macOS | `Memoria-0.13.1.dmg` (drag to Applications; right-click → Open if gated) |
+| Windows | `Memoria-Setup-<version>.exe` |
+| Linux | `memoria_<version>_amd64.deb` (`sudo dpkg -i`) or `Memoria-<version>.AppImage` |
+| macOS (Apple Silicon) | `Memoria-<version>-arm64.dmg` |
+| macOS (Intel) | `Memoria-<version>-x64.dmg` |
+
+macOS builds are not notarized yet: drag to Applications, then right-click → Open the first time.
 
 Memoria lives in the tray and starts capturing automatically.
 
