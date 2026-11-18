@@ -103,13 +103,13 @@ flowchart TB
 
 | | |
 |---|---|
-| 🔄 **Capture 9 tool** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, VS Code, Cursor, Windsurf |
+| 🔄 **Capture 9 tool** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, Windsurf aktif bawaan; VS Code dan Cursor opt-in (Settings → Sources) |
 | ⏸️ **Resume engine** | Blok SESSION RESUME otomatis di AGENTS.md / CLAUDE.md / GEMINI.md: tugas terbuka, keputusan terkunci, branch, file kotor |
 | ⚡ **Trigger pre-limit** | Begitu tool AI melaporkan limit, snapshot kerja ditangkap dan blok resume diinjeksi **seketika** — sebelum kamu ditendang |
 | 🧩 **MCP bridge — satu URL, semua tool** | MCP over HTTP di `http://127.0.0.1:48210/mcp` + registrasi satu klik ke 12 klien (Claude Code/Desktop, Codex, Gemini, opencode, Copilot CLI, Antigravity, Cursor, Windsurf, VS Code, Cline, Zed) |
 | 🤖 **Memori yang bisa dikurasi agen** | 7 tool MCP: `recall` (scope proyek + budget token), `remember` (keputusan ADD/UPDATE/NOOP), `update_memory`, `forget`, `build_context` |
 | ✅ **Tab Tasks** | Semua janji/tugas dari sesi AI dalam satu checklist |
-| 🧠 **Tiered intelligence** | Jalan **tanpa model** (heuristik → antrian tinjau), dengan Ollama, atau endpoint OpenAI-compatible (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
+| 🧠 **Tiered intelligence** | Jalan **tanpa model** (heuristik + triage otomatis, tanpa approval manual), dengan Ollama, atau endpoint OpenAI-compatible (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
 | 🔍 **Retrieval hibrid** | Keyword (FTS5 trigram) + embedding + graph centrality, toleran typo — terukur pada benchmark reproducible: **hit@5 92.8–100%** tanpa satu pun panggilan LLM |
 | 🧹 **Membersihkan diri** | Konsolidasi harian menggabungkan near-duplicate; filter noise menjaga inbox tetap jujur; bersih-bersih satu klik |
 | 🕸️ **Graph memori** | True 3D force graph: label prioritas degree dengan anti-overlap, fokus tetangga, zoom & pan |
@@ -145,9 +145,12 @@ Memoria berjalan di tray dan langsung mulai menangkap.
 
 ### 2 · Jalan pertama — tanpa model
 
-Secara bawaan Memoria memakai **Tier 0 heuristik**: sesi ditangkap dan menjadi kandidat memori
-yang masuk ke inbox **Pending approval** untuk Anda kurasi. Search, tasks, timeline, graph,
-handoff — semuanya tetap bekerja.
+Secara bawaan Memoria memakai **Tier 0 heuristik**: sesi ditangkap dan menjadi kandidat memori.
+Noise (output tool, listing shell, path lepas) dan duplikat diarsipkan otomatis, sinyal kuat
+langsung aktif, dan sedikit draft yang ragu dinilai ulang setiap hari — Anda tidak perlu
+menyetujui ribuan item satu per satu. Setiap batch triage bisa dibatalkan. Search, tasks,
+timeline, graph, handoff — semuanya tetap bekerja. Secret (API key, token, private key,
+password) disensor sebelum disimpan.
 
 Ingin ekstraksi & embedding kelas LLM?
 
@@ -244,7 +247,7 @@ untuk tool yang tidak membaca file konteks.
 |---|---|---|---|---|
 | 2 | OpenAI-compatible | opt-in eksplisit + endpoint | ✓ kelas LLM | ✓ kelas model |
 | 1 | Ollama | terpasang lokal | ✓ kelas LLM | ✓ kelas model |
-| 0 | **Heuristik** (default) | **tidak ada** | rule-based → antrian tinjau | hash lokal (256-dim) |
+| 0 | **Heuristik** (default) | **tidak ada** | rule-based + triage otomatis | hash lokal (256-dim) |
 
 - Mode `Auto`: pakai Ollama saat berjalan **dan** model tersedia, selain itu heuristik. Tidak pernah menyentuh cloud.
 - Perubahan engine langsung berlaku — tanpa restart.

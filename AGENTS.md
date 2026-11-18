@@ -1,6 +1,6 @@
 <!-- memoria:start -->
 # Handoff Proyek: Memoria — second brain offline untuk AI coding tools
-> Diperbarui manual — 2026-11-13 (repo: github.com/xinzzu/Memoria, MIT)
+> Diperbarui manual — 2026-11-17 (repo: github.com/xinzzu/Memoria, MIT)
 
 ## Apa ini
 App Electron + engine Node/TS yang menangkap transkrip sesi AI coding tools
@@ -15,7 +15,14 @@ memori yang bisa di-recall lintas tool (MCP + dashboard). North star: **limit-ho
 - `git log` — konvensi commit: conventional commits; fitur via branch
   `feat/...`/`fix/...` lalu `git merge --no-ff` ke `main`.
 
-## Status (v0.7.1 + sync M1/M2 unreleased, 2026-11-13)
+## Status (v0.12.0 rilis; `feat/tier0-max` belum rilis, 2026-11-17)
+- Terbaru: **Tier 0 tanpa approval manual** — auto-triage draft heuristik
+  (`extract/triage.ts`, `extract/noise.ts`, `triageCandidate` di heuristic.ts),
+  redaksi secret di titik masuk data (`privacy/redact.ts`), migrasi v8
+  (redaksi data lama + `triage_log`) dan v9 (reset offset untuk memulihkan
+  pesan yang hilang akibat bug `seqAllocator`). Detail: CHANGELOG [Unreleased].
+- Sync M1–M4 sudah rilis (0.9–0.12); sisa: M5 hardening.
+- Riwayat lama (di bawah) dipertahankan sebagai konteks.
 - Rilis: v0.2.0 (F0+F1A resume engine+F1B tiered intelligence) → v0.5.0 (F2 UX:
   light theme, tasks view, project detail, graph 2D/3D, i18n) → v0.6.0 (**F1C**:
   FTS5 keyword search, embedding Float32 BLOB, dedupe via SQL, list pagination)
@@ -77,9 +84,16 @@ memori yang bisa di-recall lintas tool (MCP + dashboard). North star: **limit-ho
 - String UI: English sebagai kunci `t()`, terjemahan ID di kamus `web/i18n.js`;
   **tanpa emoji** di UI chrome; string engine-facing English-first.
 
+## Gotcha Tier 0
+- Peran transkrip: `tool` = output tool (dilewati ekstraksi heuristik),
+  `system` = meta/log. Jangan memetakan `tool` ke `user` lagi.
+- Aturan noise baru → tambahkan ke `NOISE_RULES` + contoh di
+  `tests/fixtures/heuristic-eval.json`, lalu `npm run eval:heuristic`.
+- Uji triage di salinan DB: `sqlite3 ~/.memoria/memory.db ".backup /tmp/x/memory.db"`
+  lalu `HOME=$(mktemp -d) MEMORIA_DATA_DIR=/tmp/x node dist/engine/index.js maintain triage`.
+  `scan` dengan HOME asli akan menulis blok resume ke proyek nyata.
+
 ## Next
-- Verifikasi installer di mesin asli (migrasi FTS/BLOB/v3 UID+outbox `~/.memoria`
-  jalan otomatis termasuk v4 sync metadata; backup DB sebelum uji).
-- Lanjut sync **M3**: shared folder sync/watcher, applied ledger hardening,
-  conflict log UI/CLI, two-device integration. Detail posisi di `ROADMAP.md`.
+- Rilis `feat/tier0-max`; verifikasi di DB nyata (backup dulu).
+- Sync **M5** hardening; code signing (keputusan biaya). Detail: `ROADMAP.md`.
 <!-- memoria:end -->
