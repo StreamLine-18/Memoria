@@ -11,6 +11,8 @@
  * lintas-AI bekerja instan; sisanya masuk draft untuk tinjau.
  * ----------------------------------------------------------------------------- */
 
+import { noiseReason, letterRatio, wordCount } from "./noise";
+
 export const HASH_MODEL = "hash-256-v1";
 
 const HASH_DIM = 256;
@@ -170,30 +172,117 @@ function scoreForRank(m: HeuristicMemory): number {
   return (m.confidence ?? 0.5) * 2 + m.importance + ((m.signal || []).length > 0 ? 0.1 : 0);
 }
 
-/** Klasifikasi sinyal memori heuristik (dipakai extractor/aktivasi cepat). */
-export function assessHeuristicSignal(m: { kind: HeuristicKind; content: string; importance: number; confidence?: number; signal?: string[] }): { activate: boolean; confidence: number; signals: string[] } {
-  const content = m.content || "";
-  const signals = [...(m.signal || [])];
-  let confidence = m.confidence ?? 0.5;
-  if (PATH_LIKE.test(content)) { confidence += 0.06; if (!signals.includes("path")) signals.push("path"); }
-  if (CMD_LIKE.test(content)) { confidence += 0.04; if (!signals.includes("cmd")) signals.push("cmd"); }
-  if (ERR_LIKE.test(content)) { if (!signals.includes("err")) signals.push("err"); }
-  if (/\bhttps?:\/\/|\bv?\d+\.\d+/.test(content)) { if (!signals.includes("ref")) signals.push("ref"); }
-  confidence = Math.min(0.99, confidence);
+/* ---------- Triage Tier 0: active / draft / archive ----------
+ * Dulu: semua hasil heuristik default ke draft, hanya ≤8 per sesi yang lolos
+ * ambang sempit → ribuan draft menumpuk menunggu approve manual. Kini setiap
+ * kandidat diberi skor yang bisa diaudit (alasan tercatat) dan langsung
+ * diputuskan. Draft hanya untuk yang benar-benar ragu, dan punya umur
+ * (lihat extract/triage.ts). Ambang bisa disetel via settings
+ * heuristicActiveAt / heuristicArchiveAt. */
 
-  const kind = m.kind;
-  const strongKind = kind === "task_pending" || kind === "decision" || kind === "error_fixed" || kind === "task_done";
-  const entityBacked = signals.some((s) => ["path", "cmd", "err", "ref", "entity", "checkbox_todo", "checkbox_done", "decision", "todo", "done", "error_fix"].includes(s));
-  const longEnough = content.length >= 22;
-  const specific = !GENERIC_RE.test(content);
-  const activate =
-    specific && longEnough && (
-      (strongKind && (confidence >= 0.68 || entityBacked || m.importance >= 0.55)) ||
-      (kind === "preference" && confidence >= 0.74) ||
-      (kind === "fact" && confidence >= 0.72 && entityBacked) ||
-      (kind === "context" && confidence >= 0.8 && entityBacked)
-    );
-  return { activate, confidence, signals };
+export type TriageDecision = "active" | "draft" | "archive";
+
+export interface TriageResult {
+  decision: TriageDecision;
+  score: number;
+  confidence: number;
+  signals: string[];
+  /** Alasan utama keputusan (noise:<rule>, low-score, …) — untuk UI & log. */
+  reason: string;
+}
+
+const STRONG_SIGNALS = new Set(["decision", "error_fix", "checkbox_todo", "checkbox_done", "todo", "done"]);
+const KIND_BASE: Record<string, number> = {
+  decision: 0.5,
+  error_fixed: 0.52,
+  task_pending: 0.44,
+  task_done: 0.4,
+  preference: 0.48,
+  fact: 0.3,
+  context: 0.3,
+};
+const EXPLICIT_DECISION = /\b(keputusan|disepakati|diputuskan|sepakat|kita pakai|kita pilih|kami pakai|kami pilih|pakai saja|pakai aja|daripada|alih-alih|ketimbang|decided|decision|we('ll| will)? (use|go with)|going with|chose|chosen|instead of|rather than|settled? (on|for)|opt(ed)? for|switch(ed)? to|migrat(e|ed) to|ganti ke|pindah ke)\b/i;
+const EXPLICIT_TASK = /\b(todo|to-do|next steps?|follow[- ]?up|remaining|still need|not yet|belum (selesai|dibuat|ada|jalan|di)|perlu (dibuat|diperbaiki|ditambah|dicek|di)|harus (di|dibuat)|need to|needs to|must|blocked|blocker|wip|plan to|akan (dibuat|ditambahkan|dikerjakan)|lanjutkan|kerjakan|implement|tambahkan|perbaiki|fix)\b/i;
+const DEICTIC_START = /^(ini|itu|tadi|yang tadi|this|that|it|these|those|they|he|she|dia|mereka)\b/i;
+
+export const DEFAULT_ACTIVE_AT = 0.6;
+export const DEFAULT_ARCHIVE_AT = 0.36;
+
+function thresholds(): { activeAt: number; archiveAt: number } {
+  try {
+    // lazy require: modul ini juga dipakai tanpa DB (unit test murni)
+    const db = require("../store/db") as typeof import("../store/db");
+    const a = Number(db.getSetting("heuristicActiveAt", ""));
+    const b = Number(db.getSetting("heuristicArchiveAt", ""));
+    return {
+      activeAt: Number.isFinite(a) && a > 0 ? a : DEFAULT_ACTIVE_AT,
+      archiveAt: Number.isFinite(b) && b > 0 ? b : DEFAULT_ARCHIVE_AT,
+    };
+  } catch {
+    return { activeAt: DEFAULT_ACTIVE_AT, archiveAt: DEFAULT_ARCHIVE_AT };
+  }
+}
+
+/** Nilai satu kandidat. Murni (tanpa I/O kecuali membaca ambang). */
+export function triageCandidate(m: { kind: string; content: string; importance: number; confidence?: number; signal?: string[] }): TriageResult {
+  const content = (m.content || "").replace(/\s+/g, " ").trim();
+  const signals = [...(m.signal || [])];
+  let confidence = Math.min(0.99, m.confidence ?? 0.6);
+  const noise = noiseReason(content);
+  if (noise) return { decision: "archive", score: 0, confidence, signals, reason: `noise:${noise}` };
+  if (GENERIC_RE.test(content)) return { decision: "archive", score: 0, confidence, signals, reason: "noise:generic" };
+
+  if (PATH_LIKE.test(content) && !signals.includes("path")) signals.push("path");
+  if (CMD_LIKE.test(content) && !signals.includes("cmd")) signals.push("cmd");
+  if (ERR_LIKE.test(content) && !signals.includes("err")) signals.push("err");
+
+  const words = wordCount(content);
+  const sentence = words >= 5 && letterRatio(content) >= 0.65;
+  let score = KIND_BASE[m.kind] ?? 0.3;
+  score += (confidence - 0.6) * 0.5;
+  // Pola keputusan luas ("memakai", "menggunakan", "pilih") cocok dengan
+  // kalimat deskriptif biasa. Bonus sinyal kuat hanya untuk keputusan eksplisit.
+  const weakDecision = m.kind === "decision" && !EXPLICIT_DECISION.test(content);
+  // Sama untuk task: "nanti"/"tinggal"/"lanjut" sering muncul di kalimat naratif.
+  const weakTask = m.kind === "task_pending" && !signals.includes("checkbox_todo") && !EXPLICIT_TASK.test(content);
+  if (weakDecision || weakTask) score -= 0.08;
+  if (signals.some((s) => STRONG_SIGNALS.has(s) && !(weakDecision && s === "decision") && !(weakTask && s === "todo"))) score += 0.12;
+  if (signals.includes("user")) score += 0.08; // ucapan user asli (bukan output tool)
+  // Entitas (path/cmd/error) menambah nilai HANYA bila ada kalimat penjelas —
+  // dulu URL/path lepas dihitung "spesifik" dan ikut dipromosikan.
+  if (sentence && signals.some((s) => s === "path" || s === "cmd" || s === "err")) score += 0.06;
+  // Fakta = kalimat lengkap + entitas konkret (port/versi/id/endpoint).
+  if (m.kind === "fact" && sentence && words >= 8 && signals.includes("entity")) score += 0.08;
+  if (/\b(karena|supaya|agar|biar|because|so that|since|instead of|daripada|alih-alih)\b/i.test(content)) score += 0.06;
+  // Larangan/aturan eksplisit = preferensi/guardrail yang layak diingat lintas sesi.
+  if (m.kind === "preference" && sentence && /\b(jangan|harus|wajib|selalu|hindari|never|always|must|do not|don't|avoid)\b/i.test(content)) score += 0.08;
+  if (!sentence) score -= 0.22;
+  if (/\?\s*$/.test(content)) score -= 0.2; // pertanyaan bukan fakta/keputusan/task
+  if (DEICTIC_START.test(content) && words < 9) score -= 0.12; // butuh konteks yang hilang
+  if (content.length > 300) score -= 0.08;
+  score = Math.max(0, Math.min(1, score));
+
+  const { activeAt, archiveAt } = thresholds();
+  const decision: TriageDecision = score >= activeAt ? "active" : score < archiveAt ? "archive" : "draft";
+  const reason = decision === "active" ? "strong" : decision === "archive" ? "low-score" : "uncertain";
+  return { decision, score: Number(score.toFixed(3)), confidence, signals, reason };
+}
+
+/** Kompatibilitas API lama: activate = keputusan triage "active". */
+export function assessHeuristicSignal(m: { kind: HeuristicKind; content: string; importance: number; confidence?: number; signal?: string[] }): { activate: boolean; confidence: number; signals: string[] } {
+  const t = triageCandidate(m);
+  return { activate: t.decision === "active", confidence: t.confidence, signals: t.signals };
+}
+
+/** Pulihkan sinyal untuk memori tersimpan (sinyal asli tidak disimpan di DB):
+ * klasifikasi ulang kalimatnya dengan aturan yang sama seperti saat ekstraksi. */
+export function rescoreStored(m: { kind: string; content: string; importance: number }): TriageResult {
+  const content = m.content || "";
+  const cb = /^\s*(?:[-*]|\d+[.)])?\s*\[( |x|X)\]/.exec(content);
+  const cls = classifySentence(content);
+  const signals = cb ? [cb[1] === " " ? "checkbox_todo" : "checkbox_done"] : cls ? cls.signals : [];
+  const confidence = cls ? cls.confidence : 0.6;
+  return triageCandidate({ kind: m.kind, content, importance: m.importance, confidence, signal: signals });
 }
 
 /**
@@ -209,6 +298,9 @@ export function heuristicExtract(conversation: Array<{ role: string; content: st
     const content = normalizeContent(m.content || "");
     if (content.length < 15 || content.length > 360) return;
     if (GENERIC_RE.test(content)) return;
+    // Buang noise SEBELUM kuota kandidat terisi — dulu baris shell/echo tool
+    // menghabiskan slot dan lolos sebagai draft.
+    if (noiseReason(content)) return;
     const key = dedupeKey(content);
     if (!key || seen.has(key)) return;
     seen.add(key);
@@ -218,63 +310,42 @@ export function heuristicExtract(conversation: Array<{ role: string; content: st
   for (const msg of conversation) {
     const text = msg.content || "";
     if (!text.trim()) continue;
+    // Output tool (tool_result) bukan sumber memori: isinya listing/log mesin.
+    if (msg.role === "tool") continue;
     const fromUser = msg.role === "user";
     const bias = fromUser ? 0.08 : 0;
+    const tagUser = (sig: string[] | undefined) => (fromUser ? [...(sig || []), "user"] : sig);
 
     // 1) List/checkbox/todo terstruktur (sinyal sangat berguna untuk resume)
     for (const item of extractListItems(text)) {
-      push({ kind: item.kind, content: item.content, importance: Math.min(0.85, item.importance + bias), confidence: Math.min(0.98, item.confidence + bias), signal: item.signals });
+      push({ kind: item.kind, content: item.content, importance: Math.min(0.85, item.importance + bias), confidence: Math.min(0.98, item.confidence + bias), signal: tagUser(item.signals) });
     }
 
     // 2) Kalimat berpola
     for (const sentence of splitSentences(text)) {
       const hit = classifySentence(sentence);
       if (!hit) continue;
-      push({ kind: hit.kind, content: sentence, importance: Math.min(0.85, hit.importance + bias), confidence: Math.min(0.98, hit.confidence + bias), signal: hit.signals });
+      push({ kind: hit.kind, content: sentence, importance: Math.min(0.85, hit.importance + bias), confidence: Math.min(0.98, hit.confidence + bias), signal: tagUser(hit.signals) });
     }
 
     // 3) Sinyal dari blok kode (command/error/fix hint)
     for (const m of extractCodeSignals(text)) {
-      push({ ...m, importance: Math.min(0.8, (m.importance || 0.5) + bias), confidence: Math.min(0.95, (m.confidence || 0.6) + bias) });
+      push({ ...m, importance: Math.min(0.8, (m.importance || 0.5) + bias), confidence: Math.min(0.95, (m.confidence || 0.6) + bias), signal: tagUser(m.signal) });
     }
   }
 
   // Prioritaskan sinyal kuat & relevan limit-hopping, lalu batasi.
   collected.sort((a, b) => scoreForRank(b) - scoreForRank(a));
-  return collected.slice(0, 14);
+  return collected.slice(0, 16);
 }
 
 
 
-/** Backfill: promosikan draft heuristik lama yang kini memenuhi ambang sinyal
- * kuat ke active, agar data lama ikut mendapat manfaat upgrade heuristik
- * (tanpa re-ekstrak transkrip). Idempoten & aman: hanya origin heuristic. */
-export function promoteLegacyHeuristicDrafts(limit = 500): { scanned: number; promoted: number } {
+/** Kompatibilitas: `maintain heuristic-promote` kini menjalankan auto-triage
+ * penuh (promote + archive noise/duplikat/expired, tercatat & bisa di-undo). */
+export function promoteLegacyHeuristicDrafts(_limit = 500): { scanned: number; promoted: number; archived: number } {
   // require lazily to avoid cycle at module init
-  const db = require("../store/db") as typeof import("../store/db");
-  const drafts = db.listHeuristicDrafts().slice(0, limit);
-  let promoted = 0;
-  for (const m of drafts) {
-    const sig = assessHeuristicSignal({
-      kind: m.kind as any,
-      content: m.content,
-      importance: m.importance,
-      confidence: 0.5,
-      signal: [],
-    });
-    if (!sig.activate || m.id == null) continue;
-    const importance = Math.max(
-      m.importance,
-      sig.signals.some((s) => ["path", "cmd", "err", "ref", "entity"].includes(s)) ? 0.58 : 0.52
-    );
-    const ok = db.updateMemory(m.id, { importance } as any);
-    // update status directly (updateMemory doesn't take status; use SQL)
-    if (ok) {
-      try {
-        db.getDb().prepare("UPDATE memories SET status = 'active', updated_at = ?, updated_by = ? WHERE id = ? AND origin = 'heuristic' AND status = 'draft'").run(Date.now(), db.getDeviceId(), m.id);
-        promoted++;
-      } catch { /* ignore */ }
-    }
-  }
-  return { scanned: drafts.length, promoted };
+  const { runTriage } = require("./triage") as typeof import("./triage");
+  const r = runTriage();
+  return { scanned: r.scanned, promoted: r.promoted, archived: r.archived };
 }

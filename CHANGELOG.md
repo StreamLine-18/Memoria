@@ -50,6 +50,67 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+**Tier 0 tanpa approval manual.** Draft heuristik kini di-triage otomatis
+(noise/duplikat → arsip, sinyal kuat/terkonfirmasi → active), plus perbaikan
+kehilangan data di capture dan redaksi secret.
+
+### Fixed
+- **CRITICAL — capture masih kehilangan pesan**: `seqAllocator` (perbaikan
+  0.11.0) mengembalikan `n++` pada salinan lokal, jadi semua pesan satu sesi
+  dalam satu scan mendapat seq yang sama dan `INSERT OR IGNORE` membuang
+  semuanya kecuali yang pertama. Di satu DB nyata, 13 dari 35 sesi Claude
+  tersimpan tanpa pesan sama sekali. Migrasi **v9** me-reset offset sumber
+  claude/codex/opencode/vscdb agar scan berikutnya membaca ulang;
+  `insertTranscript` menolak pesan yang sudah ada (sesi + ts + konten), jadi
+  pembacaan ulang tidak menggandakan data.
+- **Secret terenkripsi tidak bisa dibaca**: `decryptSecret` hanya mendekode
+  base64 tanpa `safeStorage.decryptString`, sehingga API key OpenAI-compatible
+  dan URL/token webhook terbaca sebagai byte ciphertext di app Electron.
+- **Output tool tercatat sebagai ucapan user**: `tool_result` Claude Code
+  (bertipe `user` di jsonl) kini disimpan dengan role `tool`, pesan `isMeta`
+  sebagai `system`, dan tag suntikan IDE/CLI (`<system-reminder>`,
+  `<ide_opened_file>`, `<command-*>`) dibuang. Dulu output shell malah dapat
+  bobot +0.08 sebagai "pesan user" di ekstraksi heuristik.
+- MCP server melaporkan versi dari `package.json` (dulu `0.1.0`).
+
+### Added
+- **Auto-triage Tier 0** (`extract/triage.ts`): setiap draft heuristik
+  diputuskan active / archive / tetap draft dengan alasan tercatat; berjalan
+  saat startup dan harian (`autoTriage`, default on); draft yang tetap ragu
+  diarsip setelah `draftTtlDays` (default 14). Semua perubahan dicatat per
+  batch di `triage_log` dan bisa di-undo. Di DB nyata: 4.153 draft → 3,
+  dengan ±400 dipromosikan.
+- **Filter noise** (`extract/noise.ts`): tabel aturan untuk echo tool, output
+  shell (`ls`/`ps`/`grep -n`), log build, kode/path/URL lepas, narasi dan
+  tawaran agen. Dijalankan sebelum kuota kandidat per window terisi.
+- **Skor triage** (`triageCandidate`): keputusan/task eksplisit dapat bonus
+  sinyal kuat, kalimat deskriptif yang kebetulan memuat "memakai"/"nanti"
+  tidak; pertanyaan dan fragmen yang bergantung konteks diberi penalti.
+  Kandidat `archive` tidak disimpan sama sekali. Batas promosi per sesi
+  menyesuaikan panjang sesi (dulu tetap 8).
+- **Corroboration**: draft yang muncul lagi di sesi atau tool lain
+  dipromosikan otomatis.
+- **Redaksi secret** (`privacy/redact.ts`) di `insertTranscript`,
+  `insertMemory`, `updateMemory`: token OpenAI/Anthropic/GitHub/GitLab/AWS/
+  Google/Slack/Stripe/HF/npm, webhook Discord/Slack, bot Telegram, JWT,
+  private key PEM, password di connection string, bearer token,
+  `NAMA_SECRET=nilai`, dan blok `<private>…</private>`. Migrasi **v8**
+  meredaksi data lama.
+- Dashboard: tombol **Auto-triage** (pratinjau jumlah + alasan sebelum
+  diterapkan), **Undo last triage**, inbox berkelompok proyek × jenis dengan
+  *Approve all* / *Archive all*, baris status triage/redaksi, toggle Settings.
+- API: `GET/POST /api/triage`, `POST /api/triage/undo`,
+  `GET /api/drafts/groups`, `GET /api/privacy`.
+- CLI: `maintain triage [--apply|--undo]`, `memoria help`; entri `bin` +
+  shebang untuk `npx`/install global (mode headless = `memoria server`).
+- Set evaluasi berlabel + `npm run eval:heuristic` (active precision, memori
+  bertahan, noise terbuang); dijaga di test suite.
+
+### Changed
+- `maintain heuristic-promote` kini menjalankan auto-triage penuh.
+- Server lokal menolak `Origin` asing untuk semua method (dulu hanya non-GET);
+  token API dibandingkan constant-time.
+
 ## [0.12.0] — 2026-11-16 — Heuristic Continuity
 
 Heuristic/no-AI mode is now strong enough for instant limit-hopping continuity without a model: richer signal extraction, deterministic resume fallbacks, and upgrade paths for legacy data and embeddings.

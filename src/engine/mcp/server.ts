@@ -25,10 +25,20 @@ How to use:
 4. If a stored memory is wrong or outdated, correct it with update_memory (auto re-embeds) or remove it with forget.
 `;
 
+/** Versi dari package.json (dulu hardcode "0.1.0" sementara app sudah 0.12). */
+function appVersion(): string {
+  try {
+    // dist/engine/mcp/server.js → root paket (juga berlaku di dalam asar Electron)
+    return String(require("../../../package.json").version || "0.0.0");
+  } catch {
+    return "0.0.0";
+  }
+}
+
 export function createMcpServer(): Server {
   ensureDb();
   const server = new Server(
-    { name: "memoria", version: "0.1.0" },
+    { name: "memoria", version: appVersion() },
     { capabilities: { tools: {} } }
   );
 

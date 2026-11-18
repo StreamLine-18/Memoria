@@ -1,4 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConfig } from "./config";
@@ -168,6 +169,13 @@ function serveStatic(url: URL, res: ServerResponse): boolean {
   return true;
 }
 
+function tokenMatches(given: string | string[] | undefined, expected: string): boolean {
+  if (typeof given !== "string") return false;
+  const a = Buffer.from(given, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function startHttpServer(): Promise<void> {
   ensureDb();
   const port = getConfig().httpPort;
@@ -181,15 +189,18 @@ export function startHttpServer(): Promise<void> {
         sendJson(res, 403, { error: "forbidden host" });
         return;
       }
-      // 2) Origin untuk request pengubah data: cegah drive-by dari situs eksternal.
-      if (req.method !== "GET" && req.headers.origin && !isLocalHost(String(req.headers.origin))) {
+      // 2) Origin asing ditolak untuk SEMUA method (dulu hanya non-GET). Browser
+      //    selalu mengirim Origin pada fetch lintas situs; tanpa ini situs luar
+      //    bisa memicu GET berefek samping (mis. /api/export) ke localhost.
+      if (req.headers.origin && !isLocalHost(String(req.headers.origin))) {
         sendJson(res, 403, { error: "forbidden origin" });
         return;
       }
       // 3) Token opsional (setting "apiToken") untuk lapisan tambahan.
+      //    Perbandingan constant-time (timingSafeEqual).
       const apiToken = getSetting("apiToken", "");
-      if (apiToken && req.headers["x-memoria-token"] !== apiToken) {
-        sendJson(res, 401, { error: "token tidak valid (header x-memoria-token)" });
+      if (apiToken && !tokenMatches(req.headers["x-memoria-token"], apiToken)) {
+        sendJson(res, 401, { error: "invalid token (x-memoria-token header)" });
         return;
       }
       // M8 (audit): endpoint berat dilindungi in-flight guard per-path —
@@ -478,6 +489,48 @@ export function startHttpServer(): Promise<void> {
     // F3: notifikasi batch approve = satu notif ringkas berisi jumlah.
     if (action === "approve" && affected > 0) emitEvent("memory_approved", { count: affected, batch: true });
     sendJson(res, 200, { ok: true, affected });
+      } else if (url.pathname === "/api/triage" && req.method === "GET") {
+        // Status + pratinjau (dry-run) auto-triage Tier 0.
+        const { runTriage, triageStatus } = await import("./extract/triage");
+        sendJson(res, 200, { status: triageStatus(), preview: runTriage({ dryRun: true }) });
+      } else if (url.pathname === "/api/triage" && req.method === "POST") {
+        const { runTriage, triageStatus } = await import("./extract/triage");
+        const r = runTriage();
+        if (r.promoted || r.archived) emitEvent("memory", { triage: r.batch });
+        sendJson(res, 200, { ok: true, result: r, status: triageStatus() });
+      } else if (url.pathname === "/api/triage/undo" && req.method === "POST") {
+        const body = await readBody(req);
+        const { undoTriage, triageStatus } = await import("./extract/triage");
+        const r = undoTriage(body.batch ? String(body.batch) : undefined);
+        if (r.restored) emitEvent("memory", { triageUndo: r.batch });
+        sendJson(res, 200, { ok: true, ...r, status: triageStatus() });
+      } else if (url.pathname === "/api/drafts/groups" && req.method === "GET") {
+        // Inbox berkelompok: proyek × jenis, dengan id untuk aksi massal satu klik.
+        const rows = getDb()
+          .prepare(
+            `SELECT m.id, m.kind, m.project_id AS projectId, COALESCE(p.name, p.slug, '') AS project
+             FROM memories m LEFT JOIN projects p ON p.id = m.project_id
+             WHERE m.archived = 0 AND m.status = 'draft' ORDER BY m.created_at DESC`
+          )
+          .all() as Array<{ id: number; kind: string; projectId: number | null; project: string }>;
+        const groups = new Map<string, { projectId: number | null; project: string; kind: string; ids: number[] }>();
+        for (const r of rows) {
+          const key = `${r.projectId ?? "null"}|${r.kind}`;
+          if (!groups.has(key)) groups.set(key, { projectId: r.projectId, project: r.project || "(no project)", kind: r.kind, ids: [] });
+          groups.get(key)!.ids.push(r.id);
+        }
+        sendJson(res, 200, { groups: [...groups.values()].sort((a, b) => b.ids.length - a.ids.length), total: rows.length });
+      } else if (url.pathname === "/api/privacy" && req.method === "GET") {
+        // Privacy report: apa yang ditangkap & berapa secret yang disensor.
+        const d = getDb();
+        const perTool = d.prepare("SELECT tool, COUNT(*) AS c, MAX(ts) AS last FROM transcripts GROUP BY tool ORDER BY c DESC").all();
+        const { triageStatus } = await import("./extract/triage");
+        sendJson(res, 200, {
+          redactedTotal: Number(getSetting("redactedTotal", "0")) || 0,
+          cloudEngine: getSetting("extractEngine", "") === "openai" || getSetting("embedEngine", "") === "openai",
+          perTool,
+          triage: triageStatus(),
+        });
       } else if (url.pathname === "/api/memories/archive" && req.method === "POST") {
         const body = await readBody(req);
         const id = Number(body.id || 0);
@@ -499,6 +552,7 @@ export function startHttpServer(): Promise<void> {
             autoConsolidate: getSetting("autoConsolidate", "1"),
             globalPalette: getSetting("globalPalette", "1"),
             reviewMode: getSetting("reviewMode", "0"),
+            autoTriage: getSetting("autoTriage", "1"),
             weeklyDigest: getSetting("weeklyDigest", "1"),
             autoStartLogin: getSetting("autoStartLogin", "1"),
             shortcutQuick: getSetting("shortcutQuick", "CommandOrControl+Shift+M"),

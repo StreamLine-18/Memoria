@@ -7,7 +7,7 @@ import {
   ensureProject,
 } from "../store/db";
 import { withTx } from "../store/tx";
-import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental } from "./util";
+import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, stripInjectedTags } from "./util";
 
 function contentFromBlock(content: any): string {
   if (typeof content === "string") return content;
@@ -26,7 +26,7 @@ function contentFromBlock(content: any): string {
 }
 
 function cleanContent(text: string): string {
-  return text
+  return stripInjectedTags(text)
     .replace(/<permissions instructions>[\s\S]*?<\/permissions instructions>/gi, "")
     .replace(/<environment_context>[\s\S]*?<\/environment_context>/gi, "")
     .replace(/\n{3,}/g, "\n\n")

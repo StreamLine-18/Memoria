@@ -1,7 +1,7 @@
 import { getDb, getPendingExtraction, markExtracted, projectSlugById, getBoolSetting } from "../store/db";
 import { getExtractProvider, getEmbedProvider, embedManyVia } from "./provider";
 import { addMemoryWithDedupe } from "./dedupe";
-import { assessHeuristicSignal } from "./heuristic";
+import { triageCandidate } from "./heuristic";
 
 let running = false;
 let lastAttempt = 0;
@@ -88,7 +88,10 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
       const projectId = rows[0].projectId;
       const tool = rows[0].tool;
       let autoPromoted = 0;
-      const MAX_AUTO_PROMOTE = 8; // batasi noise per sesi, tetap memberi kontinuitas instan
+      // Dulu batas keras 8/sesi membuat kandidat bagus di sesi panjang terparkir
+      // sebagai draft. Kini kuota mengikuti panjang sesi (noise sudah dibuang
+      // oleh triage), dengan batas atas agar satu sesi tidak membanjiri.
+      const MAX_AUTO_PROMOTE = Math.min(40, 10 + Math.ceil(sorter.length / 6));
 
       const windows: typeof pending[] = [];
       const CHUNK = 24;
@@ -97,8 +100,10 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
       }
 
       for (const winRows of windows) {
+        // Heuristik butuh peran "tool" untuk melewati output mesin; LLM
+        // menerima format lama (user/assistant) agar perilakunya tidak berubah.
         const conversation = winRows.map((r) => ({
-          role: r.role === "user" ? "user" : "assistant",
+          role: r.role === "user" ? "user" : heuristic && r.role === "tool" ? "tool" : "assistant",
           content: r.content,
         }));
         const memories = await extractProv.extract(projectSlugById(projectId) || "unknown", conversation);
@@ -111,12 +116,15 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
           let status = defaultStatus;
           let importance = mem.importance;
           if (heuristic) {
-            const sig = assessHeuristicSignal(mem as any);
-            if (sig.activate && autoPromoted < MAX_AUTO_PROMOTE) {
+            const t = triageCandidate(mem as any);
+            // archive = noise / skor rendah: tidak disimpan sama sekali
+            // (transkrip asal tetap ada, bisa diekstrak ulang).
+            if (t.decision === "archive") return;
+            if (t.decision === "active" && autoPromoted < MAX_AUTO_PROMOTE) {
               status = "active";
               autoPromoted++;
               // sinyal kuat sedikit dinaikkan agar mudah muncul di resume/context
-              importance = Math.max(importance, sig.signals.some((s) => ["path","cmd","err","ref","entity"].includes(s)) ? 0.58 : 0.52);
+              importance = Math.max(importance, t.signals.some((s) => ["path", "cmd", "err"].includes(s)) ? 0.58 : 0.52);
             } else {
               status = "draft";
             }

@@ -9,6 +9,11 @@ try {
   // di luar Electron (CLI/MCP murni)
 }
 
+/** Khusus test: suntik implementasi safeStorage palsu (null = kembalikan asli). */
+export function __setSafeStorageForTest(ss: unknown): void {
+  electronMod = ss ? { safeStorage: ss } : null;
+}
+
 export function encryptionAvailable(): boolean {
   try {
     return !!electronMod?.safeStorage?.isEncryptionAvailable?.();
@@ -34,7 +39,8 @@ export function decryptSecret(stored: string): string | null {
     if (!stored.startsWith("enc1:")) return stored; // plaintext legacy
     const ss = electronMod?.safeStorage;
     if (ss?.isEncryptionAvailable?.()) {
-      return Buffer.from(stored.slice(5), "base64").toString("utf8");
+      // Dulu hanya decode base64 → mengembalikan byte ciphertext, bukan plaintext.
+      return ss.decryptString(Buffer.from(stored.slice(5), "base64"));
     }
   } catch {
     // tidak bisa didekripsi di konteks ini

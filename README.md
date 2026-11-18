@@ -103,13 +103,13 @@ flowchart TB
 
 | | |
 |---|---|
-| 🔄 **Capture from 9 tools** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, VS Code, Cursor, Windsurf |
+| 🔄 **Capture from 9 tools** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, Windsurf on by default; VS Code and Cursor opt-in (Settings → Sources) |
 | ⏸️ **Resume engine** | A SESSION RESUME block auto-injected into AGENTS.md / CLAUDE.md / GEMINI.md: open tasks, locked decisions, current branch, dirty files |
 | ⚡ **Pre-limit trigger** | The moment your AI tool reports a usage limit, Memoria captures a work snapshot (files, commands, git state) and injects the resume block **immediately** — before you're kicked out |
 | 🧩 **MCP bridge — one URL, every tool** | MCP over HTTP at `http://127.0.0.1:48210/mcp` + one-click registration into 12 clients (Claude Code/Desktop, Codex, Gemini, opencode, Copilot CLI, Antigravity, Cursor, Windsurf, VS Code, Cline, Zed) |
 | 🤖 **Self-editing memory** | Agents don't just read the brain — they curate it: `recall` (project-scoped, token budget), `remember` (ADD/UPDATE/NOOP decisions), `update_memory`, `forget`, `build_context` |
 | ✅ **Tasks view** | Every task your AI sessions promised, in one checkable board |
-| 🧠 **Tiered intelligence** | Works with **no model at all** (heuristics + review queue), with Ollama, or any OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
+| 🧠 **Tiered intelligence** | Works with **no model at all** (heuristics + automatic triage, no manual approval), with Ollama, or any OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM, cloud — opt-in) |
 | 🔍 **Hybrid retrieval** | Keyword (FTS5 trigram) + embeddings + graph centrality, fuzzy-tolerant — measured on a reproducible benchmark: **hit@5 92.8–100%** with zero LLM calls |
 | 🕸️ **Memory graph** | True 3D force graph (2D fallbacks), degree-priority labels with anti-overlap, hover focus on neighbors, zoom & pan |
 | 📋 **Tasks & timeline** | Per-project activity + git history + weekly digest |
@@ -146,8 +146,11 @@ Memoria lives in the tray and starts capturing automatically.
 ### 2 · First run — no model required
 
 Out of the box, Memoria runs on **Tier 0 heuristics**: sessions are captured and turned into
-memory candidates that land in the **Pending approval** inbox for you to curate. Search, tasks,
-timeline, graph, handoff — everything works.
+memories. Noise (tool output, shell listings, bare paths) and duplicates are archived
+automatically, strong signals become active, and the few uncertain drafts are re-checked daily —
+you never have to approve thousands of items by hand. Every triage batch can be undone. Search,
+tasks, timeline, graph, handoff — everything works. Secrets (API keys, tokens, private keys,
+passwords) are redacted before anything is stored.
 
 Want LLM-grade extraction and embeddings later?
 
@@ -255,7 +258,7 @@ tools that don't read context files.
 |---|---|---|---|---|
 | 2 | OpenAI-compatible | explicit opt-in + endpoint | ✓ LLM-grade | ✓ model-grade |
 | 1 | Ollama | installed locally | ✓ LLM-grade | ✓ model-grade |
-| 0 | **Heuristics** (default) | **nothing** | rule-based → review queue | local hash (256-dim) |
+| 0 | **Heuristics** (default) | **nothing** | rule-based + auto-triage | local hash (256-dim) |
 
 - `Auto` mode: Ollama when it's running **and** the model exists, otherwise heuristics.
   Never touches the cloud.
@@ -379,7 +382,7 @@ or Settings → Sync. Bundles are end-to-end encrypted and never include embeddi
 settings, transcripts, or machine-local paths.
 
 **Do I need Ollama?**
-No. Heuristics work with zero models — the review-queue inbox guides you from there. Ollama is
+No. Heuristics work with zero models and triage their own output automatically. Ollama is
 an upgrade path, detected automatically when you install it.
 
 **Which tools are supported?**

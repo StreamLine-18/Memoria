@@ -1,4 +1,4 @@
-import { insertMemory, updateMemory, Memory, effectiveStatus, getDb, decodeEmbedding } from "../store/db";
+import { insertMemory, updateMemory, approveMemory, Memory, effectiveStatus, getDb, decodeEmbedding } from "../store/db";
 import { emitEvent } from "../events";
 
 export function cosine(a: number[], b: number[]): number {
@@ -80,7 +80,18 @@ function dedupeCandidates(m: Memory, hasEmb: boolean): Memory[] {
       status: (r.status as string) || "active",
       origin: (r.origin as string) || "user",
       embedModel: (r.embed_model as string) || "",
+      sourceSession: (r.source_session as string) || "",
     }));
+}
+
+/** T0-4 corroboration: draft heuristik yang muncul lagi di SESI LAIN (atau
+ * tool lain) bukan kebetulan satu kalimat — promosikan ke active. */
+function corroborate(existing: Memory, incoming: Memory): void {
+  if (existing.status !== "draft" || existing.origin !== "heuristic" || existing.id == null) return;
+  const otherSession = !!incoming.sourceSession && !!existing.sourceSession && incoming.sourceSession !== existing.sourceSession;
+  const otherTool = !!incoming.sourceTool && !!existing.sourceTool && incoming.sourceTool !== existing.sourceTool;
+  if (!otherSession && !otherTool) return;
+  approveMemory(existing.id);
 }
 
 export function addMemoryWithDedupe(m: Memory): DedupeResult {
@@ -121,6 +132,7 @@ export function addMemoryWithDedupe(m: Memory): DedupeResult {
   const updateSim = hasEmb ? 0.6 : 0.75; // jalur teks lebih ketat (rawan false-positive)
   if (best >= 0 && bestSim >= mergeAt) {
     const existing = candidates.find((c) => c.id === best)!;
+    corroborate(existing, m);
     const updated = tryUpdate(existing);
     if (updated) return updated;
     updateMemory(best, {

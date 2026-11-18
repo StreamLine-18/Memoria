@@ -617,12 +617,25 @@ function renderMemoryList(box, items) {
   // PR-38 H5: batch bar hanya sah di tab draft (dulu bocor ke Active/Archive).
   const bar = document.getElementById('draftBatchBar');
   if (bar) bar.style.display = state.memTab === 'draft' ? 'flex' : 'none';
+  if (state.memTab !== 'draft') {
+    for (const id of ['draftGroups', 'draftTriageInfo']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    }
+  }
   // PR-N: jaga posisi scroll + skip rebuild saat HTML identik — SSE refresh
   // tidak lagi membuat list "berkedip" dan scroll loncat ke atas.
   const content = document.querySelector(".content");
   const scrollBefore = content ? content.scrollTop : 0;
   if (!items || !items.length) {
-    box.innerHTML = emptyState(t("No matching memories"), t("Try different keywords, or add a memory manually."));
+    box.innerHTML = state.memTab === "draft"
+      ? emptyState(t("Inbox is clean"), t("Memoria triages new drafts automatically. Nothing is waiting for you."))
+      : emptyState(t("No matching memories"), t("Try different keywords, or add a memory manually."));
+    if (state.memTab === "draft") {
+      refreshTriageInfo();
+      const groups = document.getElementById("draftGroups");
+      if (groups) groups.style.display = "none";
+    }
     if (content) content.scrollTop = scrollBefore;
     return;
   }
@@ -667,10 +680,127 @@ function wireCleanNoise() {
 }
 wireCleanNoise();
 
+/* ---------- Auto-triage Tier 0 + inbox berkelompok ----------
+ * Draft tidak lagi harus di-approve satu per satu: auto-triage memindahkan
+ * noise/duplikat/kedaluwarsa ke arsip dan mempromosikan sinyal kuat, dengan
+ * pratinjau sebelum diterapkan dan undo per batch. Grup proyek x jenis
+ * memberi aksi massal satu klik untuk sisa draft. */
+const kindName = (k) => t(KIND_LABEL[k] || k);
+
+function reasonLabel(r) {
+  if (r.startsWith("noise:")) return t("noise") + " (" + r.slice(6) + ")";
+  const map = { strong: "strong signal", corroborated: "seen in several sessions", duplicate: "duplicate", "duplicate-of-active": "duplicate of an active memory", expired: "expired", "low-score": "low quality", uncertain: "uncertain" };
+  return t(map[r] || r);
+}
+
+async function refreshTriageInfo() {
+  const info = document.getElementById("draftTriageInfo");
+  const undo = document.getElementById("batchUndoTriage");
+  if (!info) return;
+  try {
+    const s = await api("/api/privacy");
+    const tr = s.triage || {};
+    undo.style.display = tr.lastBatch ? "" : "none";
+    const parts = [];
+    if (tr.lastAt) parts.push(t("Last auto-triage: {0}", new Date(tr.lastAt).toLocaleString()));
+    if (tr.archivedTotal) parts.push(t("{0} noise drafts archived automatically so far", tr.archivedTotal.toLocaleString()));
+    if (s.redactedTotal) parts.push(t("{0} secrets redacted before storage", s.redactedTotal.toLocaleString()));
+    parts.push(tr.auto ? t("Drafts older than {0} days are re-checked daily", tr.ttlDays) : t("Automatic triage is off"));
+    info.textContent = parts.join(" · ");
+    info.style.display = "";
+  } catch {
+    info.style.display = "none";
+  }
+}
+
+async function renderDraftGroups() {
+  const wrap = document.getElementById("draftGroups");
+  if (!wrap) return;
+  if (state.memTab !== "draft") { wrap.style.display = "none"; return; }
+  let data;
+  try { data = await api("/api/drafts/groups"); } catch { wrap.style.display = "none"; return; }
+  if (!data.groups.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "";
+  wrap.innerHTML = `<div class="card-desc" style="margin:0 0 6px">${esc(t("Review by group — approve or archive a whole group in one click"))}</div>
+    <div class="list">${data.groups.slice(0, 12).map((g, i) => `
+      <div style="display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--line, rgba(127,127,127,.2)); border-radius:8px">
+        <div style="flex:1; min-width:0"><b>${esc(g.project)}</b> · ${esc(kindName(g.kind))} <span class="muted">(${g.ids.length})</span></div>
+        <button class="btn" data-group-act="approve" data-group="${i}">${esc(t("Approve all"))}</button>
+        <button class="btn danger-ghost" data-group-act="archive" data-group="${i}">${esc(t("Archive all"))}</button>
+      </div>`).join("")}</div>`;
+  wrap.onclick = async (e) => {
+    const btn = e.target.closest("[data-group-act]");
+    if (!btn) return;
+    const g = data.groups[Number(btn.dataset.group)];
+    const action = btn.dataset.groupAct;
+    btn.disabled = true;
+    try {
+      const r = await api("/api/memories/batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ids: g.ids }) });
+      toast(action === "approve" ? `${t("Approved")} ${r.affected}` : t("Archived {0}", r.affected));
+      loadStats();
+      renderMemories();
+      renderDraftGroups();
+    } catch (err) {
+      toast(t("Failed: ") + err.message, "err");
+      btn.disabled = false;
+    }
+  };
+}
+
+function wireAutoTriage() {
+  const run = document.getElementById("batchAutoTriage");
+  const undo = document.getElementById("batchUndoTriage");
+  if (!run || run.dataset.wired) return;
+  run.dataset.wired = "1";
+  run.addEventListener("click", async () => {
+    run.disabled = true;
+    try {
+      const { preview } = await api("/api/triage");
+      if (!preview.promoted && !preview.archived) {
+        toast(t("Nothing to triage — the inbox is already clean"));
+        return;
+      }
+      const top = Object.entries(preview.reasons).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .map(([r, n]) => `  ${n}  ${reasonLabel(r)}`).join("\n");
+      const msg = t("Auto-triage {0} drafts:\n- {1} become active\n- {2} move to archive (recoverable)\n- {3} stay for review", preview.scanned, preview.promoted, preview.archived, preview.kept) + "\n\n" + top + "\n\n" + t("You can undo this afterwards. Continue?");
+      if (!confirm(msg)) return;
+      const r = await api("/api/triage", { method: "POST" });
+      toast(t("Triage done: {0} active, {1} archived", r.result.promoted, r.result.archived));
+      loadStats();
+      renderMemories();
+      renderDraftGroups();
+      refreshTriageInfo();
+    } catch (e) {
+      toast(t("Failed: ") + e.message, "err");
+    } finally {
+      run.disabled = false;
+    }
+  });
+  undo.addEventListener("click", async () => {
+    if (!confirm(t("Restore every memory from the last triage back to Pending approval?"))) return;
+    undo.disabled = true;
+    try {
+      const r = await api("/api/triage/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      toast(t("Restored {0} memories to Pending approval", r.restored));
+      loadStats();
+      renderMemories();
+      renderDraftGroups();
+      refreshTriageInfo();
+    } catch (e) {
+      toast(t("Failed: ") + e.message, "err");
+    } finally {
+      undo.disabled = false;
+    }
+  });
+}
+wireAutoTriage();
+
 function wireDraftBatch(box) {
   const bar = document.getElementById("draftBatchBar");
   if (!bar) return;
   bar.style.display = "flex";
+  refreshTriageInfo();
+  renderDraftGroups();
   // Perubahan checkbox mengalir lewat delegasi `change` di bindRowActions;
   // di sini cukup set jumlah awal bar.
   updateDraftBar(box);

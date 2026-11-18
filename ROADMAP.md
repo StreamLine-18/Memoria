@@ -43,10 +43,21 @@ heuristic-promote|reembed|consolidate|all` + promosi sekali-jalan saat startup.
 Sumber capture Windsurf diaktifkan default. E2E terisolasi (heuristik, tanpa
 model) lolos: ekstrak+snapshot+resume lintas sesi/tool.
 
+**Tier 0 maximization (2026-11-17, branch `feat/tier0-max`):** draft heuristik
+tidak lagi butuh approval manual — auto-triage (`extract/triage.ts`) memutuskan
+active/archive/draft dengan alasan tercatat, undo per batch, TTL draft 14 hari,
+jalan saat startup + harian. Filter noise berbasis tabel (`extract/noise.ts`),
+skor `triageCandidate`, corroboration lintas sesi/tool, inbox berkelompok +
+pratinjau/undo di dashboard. Diukur di salinan DB nyata: 4.153 draft → 3.
+Juga: bug seq capture (pesan hilang) + migrasi v9 pemulihan, `tool_result` →
+role `tool`, redaksi secret + migrasi v8, `decryptSecret` diperbaiki, Origin
+asing ditolak untuk semua method, `bin`/`help` untuk `npx`. Test **84 kasus**;
+`npm run eval:heuristic` (set berlabel) menjaga kualitas.
+
 **Backlog eksekusi berikutnya (urut):**
-1. Merge & rilis heuristic-maximization; verifikasi E2E di instalasi/DB nyata
-   (watcher aktif, lintas tool) dan jalankan `maintain heuristic-promote`/`reembed`
-   bila perlu untuk data lama.
+1. Merge & rilis `feat/tier0-max`; jalankan app pada DB nyata (migrasi v8/v9
+   otomatis + auto-triage startup) dan cek scan pemulihan + Undo triage di
+   dashboard. Publish npm (`npx memoria server`) — nama paket perlu dicek.
 2. **Sync M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ →
    M5 hardening** (desain: `docs/sync-design.md`). Code signing/notarization masih
    menunggu keputusan biaya (Apple Developer + cert Windows).

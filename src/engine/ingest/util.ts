@@ -50,6 +50,25 @@ export function textFromContent(content: unknown): string {
   return "";
 }
 
+/** Apakah konten pesan berisi HANYA hasil tool (bukan ucapan manusia)?
+ * Di jsonl Claude Code, tool_result dikirim sebagai pesan bertipe "user";
+ * tanpa pengecekan ini output shell/echo tool tersimpan sebagai pesan user
+ * dan malah mendapat bobot "user" di ekstraksi heuristik. */
+export function isToolResultOnly(content: unknown): boolean {
+  if (!Array.isArray(content) || !content.length) return false;
+  return content.every((b) => b && typeof b === "object" && ((b as any).type === "tool_result" || (b as any).type === "tool_use"));
+}
+
+/* Tag yang disuntikkan IDE/CLI ke pesan user — konteks mesin, bukan ucapan user.
+ * Contoh: <system-reminder>, <ide_opened_file>, <ide_selection>,
+ * <command-name>/<command-message>/<command-args>, <local-command-stdout>. */
+const INJECTED_TAG_RE = /<(system-reminder|ide_opened_file|ide_selection|ide_diagnostics|command-name|command-message|command-args|local-command-stdout|local-command-stderr|user-prompt-submit-hook|environment_context|permissions instructions)>[\s\S]*?<\/\1>/gi;
+
+export function stripInjectedTags(text: string): string {
+  if (!text) return text;
+  return text.replace(INJECTED_TAG_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function projectSlugFromCwd(cwd?: string): string {
   if (!cwd) return "_unknown";
   return cwd.replace(/[\\/:]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "_unknown";
