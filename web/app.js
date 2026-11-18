@@ -185,7 +185,34 @@ function setView(name) {
   if (name === "settings") { renderSettings(); loadSettingsToggles(); loadBackups(); loadSyncStatus(); }
 }
 
+/* Kartu Overview: berapa konteks yang dikirim ke agen dan berapa yang dihemat
+ * mode indeks (progressive disclosure). Angka lokal, tanpa telemetry. */
+async function loadUsage() {
+  const body = document.getElementById("usageBody");
+  if (!body) return;
+  try {
+    const c = await api("/api/continuity");
+    const u = c.usage7d || {};
+    if (!u.calls) {
+      body.textContent = t("No context delivered yet. It appears once an AI tool calls Memoria or reads a resume block.");
+      return;
+    }
+    const n = (x) => Number(x || 0).toLocaleString();
+    const rows = [
+      [t("Context requests"), n(u.calls)],
+      [t("Resume blocks written"), n(u.resumeBlocks)],
+      [t("Tokens delivered"), "≈ " + n(u.tokensDelivered)],
+      [t("Tokens saved by compact index"), "≈ " + n(u.tokensSavedByIndex)],
+      [t("Re-explanations avoided (30 days)"), n(c.reExplanationsSaved)],
+    ];
+    body.innerHTML = rows.map(([k, v]) => `<div style="display:flex; justify-content:space-between; padding:2px 0"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+  } catch {
+    body.textContent = "";
+  }
+}
+
 async function loadStats() {
+  loadUsage();
   try {
     state.stats = await api("/api/stats");
     $("#sTranscripts").textContent = state.stats.transcripts.toLocaleString("id-ID");

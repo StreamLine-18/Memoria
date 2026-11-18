@@ -375,6 +375,13 @@ export async function injectHandoff(slug: string, targetFile = "AGENTS.md", opts
   try {
     let existing = "";
     if (fs.existsSync(target)) existing = fs.readFileSync(target, "utf8");
+    // Metrik lokal: blok resume ini dibaca agen di awal sesi berikutnya.
+    try {
+      const { recordContextServed } = require("./retrieve/usage") as typeof import("./retrieve/usage");
+      if (targetFile === injectionTargets()[0]) recordContextServed("resume", proj.id, block.length);
+    } catch {
+      /* metrik non-kritis */
+    }
     if (existing.includes(MARK_START) && existing.includes(MARK_END)) {
       existing = existing.replace(MARK_RE, block);
     } else if (existing.includes("<!-- pecut-memory:start -->")) {

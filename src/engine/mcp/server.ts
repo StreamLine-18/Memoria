@@ -13,17 +13,37 @@ import { relatedMemories } from "../graph";
 import { addMemoryWithDedupe } from "../extract/dedupe";
 import { buildContextBlock } from "../retrieve/contextblock";
 import { emitEvent } from "../events";
+import { recordContextServed } from "../retrieve/usage";
 
 const TOOL_DESC = `
 You have access to persistent memory (a second brain) from every AI coding tool the user has used (Claude, Codex, opencode, Gemini, Copilot, Antigravity).
 USE these tools at the START of a new session to retrieve context about previous work, and whenever the user asks about prior work.
 
 How to use:
-1. At session start, call recall with keywords relevant to the user's task.
+1. At session start, call project_context (compact index) or recall with keywords relevant to the user's task; fetch full text of the entries you need with get_memory.
 2. Before changing code, recall project context: decisions, pending tasks, fixed errors, preferences.
 3. After finishing a task, call remember to store new memories.
 4. If a stored memory is wrong or outdated, correct it with update_memory (auto re-embeds) or remove it with forget.
 `;
+
+/** Progressive disclosure: satu baris per memori (id + jenis + cuplikan).
+ * Memori pendek tampil utuh; yang panjang dipotong dan ditandai "…" agar
+ * agen tahu harus memanggil get_memory untuk detailnya. */
+export const INDEX_SNIPPET = 110;
+export function indexText(hits: Array<{ id: number; kind: string; content: string }>): string {
+  let truncated = 0;
+  const lines = hits.map((h) => {
+    const one = h.content.replace(/\s+/g, " ").trim();
+    // Project brief = ringkasan inti proyek, selalu utuh.
+    const cut = h.kind !== "brief" && one.length > INDEX_SNIPPET;
+    if (cut) truncated++;
+    return `#${h.id} [${h.kind}] ${cut ? one.slice(0, INDEX_SNIPPET - 1).trimEnd() + "…" : one}`;
+  });
+  const hint = truncated
+    ? `\n\n${truncated} entr${truncated === 1 ? "y is" : "ies are"} truncated (…). Call get_memory with their ids for full text.`
+    : "";
+  return lines.join("\n") + hint;
+}
 
 /** Versi dari package.json (dulu hardcode "0.1.0" sementara app sudah 0.12). */
 function appVersion(): string {
@@ -55,20 +75,34 @@ export function createMcpServer(): Server {
             limit: { type: "number", default: 8 },
             project: { type: "string", description: "Opsional — batasi ke satu proyek (path/nama)" },
             maxChars: { type: "number", description: "Opsional — potong hasil pada N karakter (budget context window)" },
+            mode: { type: "string", enum: ["full", "index"], default: "full", description: "\"index\" = one line per hit with id; fetch details with get_memory" },
           },
           required: ["query"],
         },
       },
       {
         name: "project_context",
-        description: "Fetch the latest context of a project: decisions, pending tasks, completed work.",
+        description:
+          "Fetch the latest context of a project: decisions, pending tasks, completed work. Default mode \"index\" returns one compact line per memory with its id (cheap on tokens); call get_memory with the ids you need for full text. Use mode \"full\" to get everything at once.",
         inputSchema: {
           type: "object",
           properties: {
-            project: { type: "string", description: "Path atau nama proyek" },
+            project: { type: "string", description: "Project path or name" },
             limit: { type: "number", default: 10 },
+            mode: { type: "string", enum: ["index", "full"], default: "index" },
           },
           required: ["project"],
+        },
+      },
+      {
+        name: "get_memory",
+        description: "Fetch the full text of specific memories by id (ids come from project_context, recall, or related).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ids: { type: "array", items: { type: "number" }, description: "Memory ids (max 20)" },
+          },
+          required: ["ids"],
         },
       },
       {
@@ -175,12 +209,18 @@ export function createMcpServer(): Server {
         // tidak melampaui context window-nya (default: tanpa batas).
         const maxChars = Number(a.maxChars || 0);
         const cap = (s: string): string => (maxChars > 0 && s.length > maxChars ? s.slice(0, maxChars - 1) + "…\n(truncated at maxChars=" + maxChars + ")" : s);
-        const text = results
+        const full = results
           .map(
             (r) =>
-              `[${r.kind}] (${r.projectSlug ?? "global"}, ${r.sourceTool}, importance ${r.importance.toFixed(2)})\n${r.content}`
+              `[${r.kind}] (id ${r.id}, ${r.projectSlug ?? "global"}, ${r.sourceTool}, importance ${r.importance.toFixed(2)})\n${r.content}`
           )
           .join("\n\n");
+        if (a.mode === "index") {
+          const idx = indexText(results);
+          recordContextServed("recall", projRec?.id ?? null, idx.length, full.length);
+          return { content: [{ type: "text", text: idx }] };
+        }
+        const text = full;
         // A5: lampirkan relasi 1-hop dari 2 hit teratas — konteks kaya tanpa
         // panggilan tambahan (traversal graphiti-style, dangkal & murah).
         const relLines: string[] = [];
@@ -193,6 +233,7 @@ export function createMcpServer(): Server {
           }
         }
         const withRel = cap(relLines.length ? `${text}\n\nRelated:\n${relLines.join("\n")}` : text);
+        recordContextServed("recall", projRec?.id ?? null, withRel.length);
         return { content: [{ type: "text", text: withRel }] };
       }
       case "build_context": {
@@ -212,6 +253,7 @@ export function createMcpServer(): Server {
           embedModel: eprov?.embedModel,
           queryEmbedding: qEmb,
         });
+        recordContextServed("build_context", resolveProject(project)?.id ?? null, block.length);
         return { content: [{ type: "text", text: block }] };
       }
       case "project_context": {
@@ -220,9 +262,32 @@ export function createMcpServer(): Server {
         if (!results.length) {
           return { content: [{ type: "text", text: `No memories stored for project "${a.project}".` }] };
         }
-        const text = results
+        const full = results
           .map((r) => `[${r.kind}] ${r.content}`)
           .join("\n\n");
+        if (a.mode === "full") {
+          recordContextServed("project_context", proj?.id ?? null, full.length);
+          return { content: [{ type: "text", text: full }] };
+        }
+        const idx = indexText(results);
+        recordContextServed("project_context", proj?.id ?? null, idx.length, full.length);
+        return { content: [{ type: "text", text: idx }] };
+      }
+      case "get_memory": {
+        const ids = (Array.isArray(a.ids) ? a.ids : [a.ids])
+          .map((x: unknown) => Number(x))
+          .filter((x: number) => Number.isInteger(x) && x > 0)
+          .slice(0, 20);
+        if (!ids.length) {
+          return { content: [{ type: "text", text: "Provide ids (from project_context, recall, or related)." }] };
+        }
+        const parts: string[] = [];
+        for (const id of ids) {
+          const m = memoryById(id);
+          parts.push(m ? `#${id} [${m.kind}] ${m.content}` : `#${id} not found`);
+        }
+        const text = parts.join("\n\n");
+        recordContextServed("get_memory", null, text.length);
         return { content: [{ type: "text", text }] };
       }
       case "related": {
