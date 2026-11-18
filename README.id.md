@@ -18,7 +18,7 @@ Tanpa cloud. Tanpa akun. Tidak ada data yang keluar dari komputer Anda.
 ![Electron](https://img.shields.io/badge/Electron-37-47848f)
 ![Inference](https://img.shields.io/badge/inference-opsional%20%28Ollama%20%2F%20OpenAI%20compat%29-529fff)
 ![Data](https://img.shields.io/badge/data-100%25%20lokal-4cc38a)
-![Status](https://img.shields.io/badge/status-0.13.0--beta-7f6eff)
+![Status](https://img.shields.io/badge/status-0.13.1--beta-7f6eff)
 [![Release](https://img.shields.io/github/v/release/xinzzu/Memoria?label=Release)](https://github.com/xinzzu/Memoria/releases)
 [![Build](https://github.com/xinzzu/Memoria/actions/workflows/build.yml/badge.svg?label=Build)](https://github.com/xinzzu/Memoria/actions)
 [![License](https://img.shields.io/github/license/xinzzu/Memoria)](LICENSE)
@@ -137,9 +137,9 @@ flowchart TB
 
 | OS | Paket |
 |---|---|
-| Windows | `Memoria Setup 0.13.0.exe` dari [Releases](https://github.com/xinzzu/Memoria/releases) |
-| Linux | `memoria_0.13.0_amd64.deb` (`sudo dpkg -i`) atau `Memoria-0.13.0.AppImage` |
-| macOS | `Memoria-0.13.0.dmg` (seret ke Applications; klik kanan → Open jika digate) |
+| Windows | `Memoria Setup 0.13.1.exe` dari [Releases](https://github.com/xinzzu/Memoria/releases) |
+| Linux | `memoria_0.13.1_amd64.deb` (`sudo dpkg -i`) atau `Memoria-0.13.1.AppImage` |
+| macOS | `Memoria-0.13.1.dmg` (seret ke Applications; klik kanan → Open jika digate) |
 
 **Headless / CLI (server, WSL, devcontainer)** — tanpa Electron, butuh Node.js 22.5 atau lebih baru:
 

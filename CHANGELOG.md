@@ -50,6 +50,13 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-11-18 — First CI-published npm release
+
+Same code as 0.13.0. This is the first release published to npm from GitHub Actions via trusted publishing (0.13.0 was published manually to create the package), and the first release with installers since 0.12.0. All changes are listed under 0.13.0 below.
+
+### Changed
+- Release pipeline: `@xinzzu/memoria` is now published from CI on every `v*` tag, with npm provenance.
+
 ## [0.13.0] — 2026-11-18 — Zero-Approval Tier 0
 
 **Tier 0 without manual approval.** Heuristic drafts are now triaged
