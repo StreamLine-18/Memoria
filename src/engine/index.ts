@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { getConfig } from "./config";
 import { scanAll, stats, ensureDb } from "./ingest/manager";
 import { startWatcher, stopWatcher } from "./ingest/watcher";
@@ -92,10 +93,34 @@ async function main(): Promise<void> {
     case "maintain": {
       ensureDb();
       const sub = process.argv[3] || "all";
+      if (sub === "triage") {
+        // maintain triage            → pratinjau (dry-run, tidak menulis apa pun)
+        // maintain triage --apply    → terapkan, tercatat sebagai satu batch
+        // maintain triage --undo     → batalkan batch terakhir
+        const { runTriage, undoTriage } = await import("./extract/triage");
+        const flags = process.argv.slice(4);
+        if (flags.includes("--undo")) {
+          const u = undoTriage();
+          console.log(u.batch ? `Undo triage ${u.batch}: ${u.restored} memories restored to draft` : "No triage batch to undo");
+          break;
+        }
+        const apply = flags.includes("--apply");
+        const r = runTriage({ dryRun: !apply });
+        console.log(`${apply ? "Triage applied" : "Triage preview (dry-run)"}: scanned ${r.scanned}, promote ${r.promoted}, archive ${r.archived}, keep ${r.kept}`);
+        for (const [reason, n] of Object.entries(r.reasons).sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(6)}  ${reason}`);
+        for (const action of ["promote", "archive", "keep"] as const) {
+          if (!r.samples[action].length) continue;
+          console.log(`\n${action} — examples:`);
+          for (const s of r.samples[action]) console.log(`  [${s.reason}] ${s.content.replace(/\s+/g, " ").slice(0, 120)}`);
+        }
+        if (!apply) console.log("\nRun with --apply to apply, --undo to revert the last batch.");
+        else if (r.batch) console.log(`\nBatch ${r.batch}. Revert with: maintain triage --undo`);
+        break;
+      }
       if (sub === "heuristic-promote" || sub === "all") {
         const { promoteLegacyHeuristicDrafts } = await import("./extract/heuristic");
         const r = promoteLegacyHeuristicDrafts(2000);
-        console.log(`Heuristic drafts: scanned ${r.scanned}, promoted ${r.promoted}`);
+        console.log(`Heuristic drafts: scanned ${r.scanned}, promoted ${r.promoted}, archived ${r.archived}`);
       }
       if (sub === "reembed" || sub === "all") {
         const { reembedAll } = await import("./sync/embed");
@@ -108,7 +133,7 @@ async function main(): Promise<void> {
         console.log(`Consolidation: removed ${r.removed} in ${r.clusters} clusters`);
       }
       if (!["heuristic-promote", "reembed", "all", "consolidate"].includes(sub)) {
-        console.log("Usage: node dist/engine/index.js maintain <heuristic-promote|reembed|consolidate|all>");
+        console.log("Usage: node dist/engine/index.js maintain <triage [--apply|--undo]|heuristic-promote|reembed|consolidate|all>");
         process.exit(1);
       }
       break;
@@ -126,6 +151,29 @@ async function main(): Promise<void> {
         process.exit(0);
       });
       await new Promise(() => {});
+      break;
+    }
+    case "help":
+    case "--help":
+    case "-h": {
+      console.log(`Memoria — offline second brain for AI coding tools
+
+Usage: memoria <command>
+
+  server                 Headless mode: dashboard + API + MCP over HTTP (port 48210),
+                         capture watcher and background jobs. No Electron needed.
+  mcp                    MCP server over stdio
+  scan                   Capture new sessions once
+  recall "keywords"      Search memories
+  status                 Counts per tool
+  integrate <tool>       Register Memoria in an AI tool's MCP config
+  handoff <slug>         Print the resume block for a project
+  maintain triage        Preview Tier 0 auto-triage (--apply, --undo)
+  maintain <reembed|consolidate|all>
+  sync <setup|status|export|import|folder|conflicts>
+  backup                 Back up the database
+
+Data dir: ~/.memoria (override with MEMORIA_DATA_DIR)`);
       break;
     }
     case "status":
