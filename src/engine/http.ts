@@ -667,9 +667,11 @@ export function startHttpServer(): Promise<void> {
         // resume siap, dan "berapa penjelasan ulang terhemat".
         const { continuityStats } = await import("./store/db");
         const s = continuityStats();
+        const { usageSummary } = await import("./retrieve/usage");
         sendJson(res, 200, {
           ...s,
           reExplanationsSaved: s.resumesReady30d,
+          usage7d: usageSummary(7),
         });
       } else if (url.pathname === '/api/drafts/clean-noise' && req.method === 'POST') {
         // PR-N2: hapus draft yang cocok pola noise (status tool, badge shields.io,
