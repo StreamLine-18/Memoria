@@ -1,7 +1,26 @@
 {
-  "name": "memoria",
-  "version": "0.12.0",
+  "name": "@xinzzu/memoria",
+  "version": "0.13.0",
   "description": "Second brain offline untuk semua AI coding tools - capture session dari Claude, Codex, Gemini, Copilot, Antigravity, opencode, VS Code, Cursor & Windsurf",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xinzzu/Memoria.git"
+  },
+  "homepage": "https://github.com/xinzzu/Memoria",
+  "bugs": {
+    "url": "https://github.com/xinzzu/Memoria/issues"
+  },
+  "keywords": [
+    "mcp",
+    "memory",
+    "ai",
+    "claude-code",
+    "codex",
+    "cursor",
+    "second-brain",
+    "offline"
+  ],
   "main": "dist/electron/main.js",
   "bin": {
     "memoria": "dist/engine/index.js"
@@ -15,7 +34,6 @@
   ],
   "type": "commonjs",
   "desktopName": "Memoria",
-  "homepage": "https://github.com/xinzzu/Memoria",
   "author": {
     "name": "xinzzu",
     "email": "xinzzui@gmail.com",
@@ -52,6 +70,9 @@
   "build": {
     "appId": "com.memoria.app",
     "productName": "Memoria",
+    "extraMetadata": {
+      "name": "memoria"
+    },
     "files": [
       "dist/**/*",
       "web/**/*",
