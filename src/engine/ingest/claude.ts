@@ -7,7 +7,7 @@ import {
   ensureProject,
 } from "../store/db";
 import { withTx } from "../store/tx";
-import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental } from "./util";
+import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, isToolResultOnly, stripInjectedTags } from "./util";
 
 export async function scanClaude(root: string, log?: (msg: string) => void): Promise<{ files: number; lines: number }> {
   const files = walkFiles(root, [".jsonl"]);
@@ -31,13 +31,17 @@ export async function scanClaude(root: string, log?: (msg: string) => void): Pro
         const cwd = j.cwd || j.project_path;
         const sessionId = j.sessionId || j.session_id || "n/a";
         const projectId = ensureProject(projectSlugFromCwd(cwd), cwd);
-        const content = textFromContent(j.message?.content);
+        const rawContent = j.message?.content;
+        // Peran sebenarnya: tool_result yang dibungkus pesan "user" → "tool";
+        // pesan meta suntikan CLI (isMeta) → "system".
+        const role = isToolResultOnly(rawContent) ? "tool" : j.isMeta ? "system" : j.type;
+        const content = role === "tool" ? textFromContent(rawContent) : stripInjectedTags(textFromContent(rawContent));
         if (content) {
           insertTranscript({
             tool: "claude",
             sessionId,
             projectId,
-            role: j.type,
+            role,
             content,
             ts: ts || Date.now(),
             seq: nextSeq(sessionId),

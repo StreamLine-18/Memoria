@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { extractEntities } from "../extract/entities";
-import { canonicalPath, projectSlugFromCwd } from "../ingest/util";
+import { canonicalPath, projectSlugFromCwd, stripInjectedTags } from "../ingest/util";
+import { redactSecrets } from "../privacy/redact";
 
 export interface Transcript {
   id?: number;
@@ -178,7 +179,74 @@ const MIGRATIONS: Migration[] = [
   { version: 5, name: "sync-applied-bundle", up: m5SyncAppliedBundle },
   { version: 6, name: "temporal-provenance-continuity", up: m6ContextProvenance },
   { version: 7, name: "audit-indexes", up: m7AuditIndexes },
+  { version: 8, name: "redact-secrets-triage-log", up: m8RedactAndTriage },
+  { version: 9, name: "recover-seq-collision-loss", up: m9RecoverSeqLoss },
 ];
+
+/** M9: pulihkan pesan yang terbuang oleh tabrakan seq (seqAllocator lama dan
+ * pendahulunya memberi seq sama untuk banyak pesan satu sesi → INSERT OR
+ * IGNORE membuang semua kecuali yang pertama; di satu DB nyata ~40% sesi
+ * Claude tersimpan 0 pesan). Offset SEMUA sumber di-reset supaya scan
+ * berikutnya membaca ulang. insertTranscript menolak pesan yang sudah ada
+ * (sesi + ts + konten), jadi pembacaan ulang tidak menggandakan data. */
+function m9RecoverSeqLoss(d: DatabaseSync): void {
+  d.exec("CREATE INDEX IF NOT EXISTS idx_transcripts_session_ts ON transcripts(tool, session_id, ts)");
+  // Hanya sumber yang timestamp-nya berasal dari data sumber (bukan Date.now()
+  // saat scan) — baca ulang sumber lain bisa menggandakan pesan.
+  // jsonl berbasis offset byte → baca dari awal.
+  d.prepare("UPDATE sources SET offset = 0 WHERE tool IN ('claude', 'codex')").run();
+  // sqlite/vscdb berbasis timestamp → mundurkan ke awal periode bug.
+  d.prepare("UPDATE sources SET offset = ? WHERE tool IN ('opencode', 'vscode', 'cursor', 'windsurf') AND offset > ?").run(SEQ_BUG_SINCE, SEQ_BUG_SINCE);
+}
+
+/** Commit 2eb8bf5 (v0.12.0) memperkenalkan bug seqAllocator. */
+const SEQ_BUG_SINCE = Date.parse("2026-11-14T00:00:00+07:00");
+
+/** M8: (1) sensor secret yang sudah terlanjur tersimpan di transkrip & memori
+ * sebelum redaktor ada; (2) ledger triage Tier 0 agar auto-triage bisa di-undo
+ * per batch. Hanya baris yang berubah yang di-UPDATE. */
+function m8RedactAndTriage(d: DatabaseSync): void {
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS triage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch TEXT NOT NULL,
+      memory_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT DEFAULT '',
+      prev_status TEXT,
+      prev_archived INTEGER,
+      prev_importance REAL,
+      ts INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_triage_batch ON triage_log(batch);
+  `);
+  let total = 0;
+  for (const table of ["transcripts", "memories"]) {
+    const upd = d.prepare(`UPDATE ${table} SET content = ? WHERE id = ?`);
+    let lastId = 0;
+    for (;;) {
+      const rows = d
+        .prepare(`SELECT id, content FROM ${table} WHERE id > ? ORDER BY id LIMIT 2000`)
+        .all(lastId) as Array<{ id: number; content: string | null }>;
+      if (!rows.length) break;
+      for (const r of rows) {
+        lastId = r.id;
+        if (!r.content) continue;
+        const res = redactSecrets(r.content);
+        if (res.count > 0) {
+          upd.run(res.text, r.id);
+          total += res.count;
+        }
+      }
+    }
+  }
+  if (total > 0) {
+    const cur = d.prepare("SELECT value FROM settings WHERE key = 'redactedTotal'").get() as { value: string } | undefined;
+    d.prepare("INSERT INTO settings (key, value) VALUES ('redactedTotal', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
+      String((Number(cur?.value) || 0) + total)
+    );
+  }
+}
 
 /** M6: memori temporal (valid_from/valid_to) + provenance sesi + ledger
  * continuity (limit_hit → resume_ready) untuk metrik limit-hopping. */
@@ -1117,18 +1185,37 @@ export function seqAllocator(tool: string): (sessionId: string) => number {
         .prepare('SELECT COALESCE(MAX(seq), -1) AS m FROM transcripts WHERE tool = ? AND session_id = ?')
         .get(tool, sessionId) as { m: number };
       n = (row.m ?? -1) + 1;
-      cache.set(sessionId, n);
     }
-    return n++;
+    // Dulu `return n++` hanya menaikkan variabel lokal: cache tetap di nilai
+    // awal → semua pesan satu sesi dalam satu pass mendapat seq sama dan
+    // INSERT OR IGNORE membuang semuanya kecuali yang pertama (data hilang).
+    cache.set(sessionId, n + 1);
+    return n;
   };
 }
 
 export function insertTranscript(t: Transcript): boolean {
   const d = getDb();
   try {
+    const content = scrub(t.content);
+    // Tolak pesan yang sudah ada (sesi + timestamp sama, konten setara).
+    // Dibutuhkan untuk re-scan pemulihan (m9) dan aman untuk scan normal:
+    // dua pesan berbeda dengan timestamp ms yang sama tetap lolos karena
+    // kontennya dibandingkan. Peran sengaja diabaikan (dulu tool_result
+    // tercatat sebagai "user").
+    {
+      const same = d
+        .prepare("SELECT content FROM transcripts WHERE tool = ? AND session_id = ? AND ts = ?")
+        .all(t.tool, t.sessionId, t.ts) as Array<{ content: string }>;
+      if (same.length) {
+        const norm = (s: string) => stripInjectedTags(s).replace(/\s+/g, " ").trim();
+        const target = norm(content);
+        if (same.some((r) => norm(r.content) === target)) return false;
+      }
+    }
     d.prepare(
       "INSERT OR IGNORE INTO transcripts (tool, session_id, project_id, role, content, ts, seq) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(t.tool, t.sessionId, t.projectId, t.role, t.content, t.ts, t.seq);
+    ).run(t.tool, t.sessionId, t.projectId, t.role, content, t.ts, t.seq);
     return true;
   } catch {
     return false;
@@ -1187,8 +1274,24 @@ export function getDataVersion(): number {
   return dataVersion;
 }
 
+/** Redaksi secret di titik masuk data + catat jumlahnya (privacy report). */
+function scrub(text: string): string {
+  if (!text) return text;
+  const r = redactSecrets(text);
+  if (r.count > 0) {
+    try {
+      const cur = Number(getSetting("redactedTotal", "0")) || 0;
+      setSetting("redactedTotal", String(cur + r.count));
+    } catch {
+      /* penghitung non-kritis */
+    }
+  }
+  return r.text;
+}
+
 export function insertMemory(m: Memory): number {
   const d = getDb();
+  m = { ...m, content: scrub(m.content) };
   const uid = m.uid || randomUUID();
   const now = Date.now();
   d.prepare(
@@ -1380,7 +1483,7 @@ export function updateMemory(
     | { content: string; kind: string; importance: number; project_id: number | null; embedding: Buffer | string | null; embed_model: string | null }
     | undefined;
   if (!current) return false;
-  const content = patch.content ?? current.content;
+  const content = patch.content != null ? scrub(patch.content) : current.content;
   const kind = patch.kind ?? current.kind;
   const importance = patch.importance ?? current.importance;
   const projectId = patch.projectId !== undefined ? patch.projectId : current.project_id;
