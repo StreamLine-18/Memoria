@@ -385,6 +385,8 @@
   "memories": "memori",
   "Clean noise drafts": "Bersihkan draft noise",
   "Auto-triage": "Triage otomatis",
+  "Never capture these projects": "Jangan pernah tangkap proyek ini",
+  "One per line: a folder path (prefix, ~ allowed) or a project name. Applies to new captures; lines starting with # are ignored.": "Satu per baris: path folder (prefix, boleh ~) atau nama proyek. Berlaku untuk capture baru; baris diawali # diabaikan.",
   "Context delivered to your AI tools": "Konteks yang dikirim ke AI tools-mu",
   "Last 7 days. Token counts are estimates (characters / 4).": "7 hari terakhir. Jumlah token adalah perkiraan (karakter / 4).",
   "No context delivered yet. It appears once an AI tool calls Memoria or reads a resume block.": "Belum ada konteks terkirim. Angka muncul setelah AI tool memanggil Memoria atau membaca blok resume.",

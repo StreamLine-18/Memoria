@@ -1374,6 +1374,11 @@
                 <div class="spacer"></div>
                 <div class="switch" data-sw="reviewMode"></div>
               </div>
+              <div style="padding:10px 0">
+                <label class="t-label" for="setCaptureExclude" data-i18n="Never capture these projects">Never capture these projects</label>
+                <div class="t-desc" data-i18n="One per line: a folder path (prefix, ~ allowed) or a project name. Applies to new captures; lines starting with # are ignored.">One per line: a folder path (prefix, ~ allowed) or a project name. Applies to new captures; lines starting with # are ignored.</div>
+                <textarea id="setCaptureExclude" rows="3" spellcheck="false" placeholder="~/work/client-secret&#10;banking-app" style="width:100%; margin-top:6px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none; resize:vertical"></textarea>
+              </div>
               <div class="toggle-row" data-key="autoTriage">
                 <div><div class="t-label" data-i18n="Automatic triage of drafts">Automatic triage of drafts</div><div class="t-desc" data-i18n="Archive noise and duplicates, promote strong signals, and re-check old drafts daily (no AI needed)">Archive noise and duplicates, promote strong signals, and re-check old drafts daily (no AI needed)</div></div>
                 <div class="spacer"></div>

@@ -575,6 +575,7 @@ export function startHttpServer(): Promise<void> {
             notifyLimit: getSetting("notifyLimit", "0"),
             notifyDraftMin: getSetting("notifyDraftMin", "3"),
             notifyTelegramChat: getSetting("notifyTelegramChat", ""),
+            captureExclude: getSetting("captureExclude", ""),
             notifyDiscordHas: getSetting("notifyDiscordUrl", "") ? "1" : "0",
             notifyTelegramHas: getSetting("notifyTelegramToken", "") ? "1" : "0",
             notifyGenericHas: getSetting("notifyGenericUrl", "") ? "1" : "0",

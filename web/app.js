@@ -1489,6 +1489,7 @@ async function loadSettingsToggles() {
       if (el && val !== undefined && val !== "") el.value = val;
     };
     setVal("setNotifyTelegramChat", s.notifyTelegramChat);
+    setVal("setCaptureExclude", s.captureExclude);
     setVal("setNotifyDraftMin", s.notifyDraftMin);
     const mark = (hasKey, stId) => {
       const st = document.getElementById(stId);
@@ -2363,6 +2364,7 @@ function wireNotifySettings() {
   wireSecret("#setNotifyTelegramToken", "notifyTelegramToken", "stNotifyTelegram");
   wireSecret("#setNotifyGeneric", "notifyGenericUrl", "stNotifyGeneric");
   wireField("#setNotifyTelegramChat", "notifyTelegramChat");
+  wireField("#setCaptureExclude", "captureExclude");
   wireField("#setNotifyDraftMin", "notifyDraftMin");
   wireTest("btnTestDiscord", "discord");
   wireTest("btnTestTelegram", "telegram");
