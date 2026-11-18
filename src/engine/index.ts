@@ -144,13 +144,28 @@ async function main(): Promise<void> {
       startWatcher();
       const { startBackgroundJobs, stopBackgroundJobs } = await import("./lifecycle");
       startBackgroundJobs();
-      console.log("[memoria] Watcher aktif. Tekan Ctrl+C untuk berhenti.");
+      const { dashboardLoginUrl, tokenRequired } = await import("./auth");
+      console.log(
+        tokenRequired()
+          ? `[memoria] Dashboard (open once to sign in): ${dashboardLoginUrl()}`
+          : `[memoria] Dashboard: ${dashboardLoginUrl().replace(/\?token=.*/, "")} (API token disabled)`
+      );
+      console.log("[memoria] Watching sessions. Press Ctrl+C to stop.");
       process.on("SIGINT", () => {
         stopWatcher();
         stopBackgroundJobs();
         process.exit(0);
       });
       await new Promise(() => {});
+      break;
+    }
+    case "token": {
+      // Print the local API token and the one-time dashboard sign-in link.
+      ensureDb();
+      const { getApiToken, dashboardLoginUrl, tokenFile, TOKEN_HEADER } = await import("./auth");
+      console.log(`Dashboard sign-in : ${dashboardLoginUrl()}`);
+      console.log(`Header for scripts: ${TOKEN_HEADER}: ${getApiToken()}`);
+      console.log(`Stored in         : ${tokenFile()} (owner-only)`);
       break;
     }
     case "help":
@@ -166,6 +181,7 @@ Usage: memoria <command>
   scan                   Capture new sessions once
   recall "keywords"      Search memories
   status                 Counts per tool
+  token                  Print the dashboard sign-in link and the API token
   integrate <tool>       Register Memoria in an AI tool's MCP config
   handoff <slug>         Print the resume block for a project
   maintain triage        Preview Tier 0 auto-triage (--apply, --undo)

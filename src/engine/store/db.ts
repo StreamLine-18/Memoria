@@ -47,10 +47,34 @@ export interface Memory {
 
 let db: DatabaseSync | null = null;
 
+/** Data dir 0700, files 0600 (including WAL/SHM and backups). Before this,
+ * ~/.memoria was 0755 and memory.db 0644: readable by every account on the
+ * machine. No-op on Windows, where the user profile ACL applies. */
+function restrictToOwner(dataDir: string): void {
+  if (process.platform === "win32") return;
+  const walk = (dir: string, depth: number): void => {
+    try {
+      fs.chmodSync(dir, 0o700);
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (depth < 2) walk(p, depth + 1);
+        } else if (e.isFile()) {
+          fs.chmodSync(p, 0o600);
+        }
+      }
+    } catch {
+      /* best effort */
+    }
+  };
+  walk(dataDir, 0);
+}
+
 export function initDb(dataDir: string): DatabaseSync {
-  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const dbPath = path.join(dataDir, "memory.db");
   db = new DatabaseSync(dbPath);
+  restrictToOwner(dataDir);
   db.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS projects (

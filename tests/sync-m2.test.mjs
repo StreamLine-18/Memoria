@@ -87,7 +87,12 @@ test("setup kunci: passphrase, status, unlock env, dan CLI", () => {
     delete process.env[ENV_PASS];
 
     assert.throws(() => keys.setupSync({ passphrase: PASS }), /already configured/);
-    assert.throws(() => keys.setupSync({ force: true }), /safeStorage|passphrase/);
+    // CLI without a passphrase now stores the key with the OS-keychain master
+    // key ("kc1:"; file backend under node --test) instead of refusing.
+    const cliSetup = keys.setupSync({ force: true });
+    assert.ok(cliSetup.recoveryCode);
+    assert.equal(keys.syncStatus({}).storage, "keychain");
+    assert.deepEqual(keys.loadGroupKey({}), crypto.decodeRecoveryCode(cliSetup.recoveryCode));
     dbmod.closeDb();
 
     const cliData = fs.mkdtempSync(path.join(os.tmpdir(), "memoria-m2-cli-data-"));

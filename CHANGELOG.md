@@ -50,6 +50,14 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Security
+- **Local API token on by default** (`auth.ts`): random token in `<dataDir>/api-token` (0600). `/api/*` and `/mcp` require the `x-memoria-token` header or the `memoria_token` cookie (HttpOnly, SameSite=Strict); static dashboard files stay public so the dashboard can explain how to sign in. Electron sets the cookie automatically; `memoria server` prints a one-time sign-in link; new `memoria token` command. Existing Cursor / VS Code HTTP MCP entries get the token header added on startup. Toggle: Settings → Require API token (`apiTokenRequired`).
+- **Secrets encrypted in CLI / npm mode** (`store/secretkey.ts`): AES-256-GCM (`kc1:`) with a master key in the macOS Keychain, Linux Secret Service, or Windows DPAPI (owner-only file fallback); the key is passed via stdin, never argv. Plaintext secrets from older versions are encrypted on startup. Sync can now be set up from the CLI without a passphrase.
+- **Owner-only data files**: the data folder is 0700 and its files 0600 (was 0755 / 0644, readable by other accounts).
+
+### Added
+- `MEMORIA_HTTP_PORT` to run a second instance on another port.
+
 ## [0.13.2] — 2026-11-18 — Intel Macs
 
 ### Added

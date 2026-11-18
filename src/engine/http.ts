@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { getApiToken, isAuthorized, safeEqual, tokenCookieHeader } from "./auth";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConfig } from "./config";
@@ -169,13 +169,6 @@ function serveStatic(url: URL, res: ServerResponse): boolean {
   return true;
 }
 
-function tokenMatches(given: string | string[] | undefined, expected: string): boolean {
-  if (typeof given !== "string") return false;
-  const a = Buffer.from(given, "utf8");
-  const b = Buffer.from(expected, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export function startHttpServer(): Promise<void> {
   ensureDb();
   const port = getConfig().httpPort;
@@ -196,11 +189,23 @@ export function startHttpServer(): Promise<void> {
         sendJson(res, 403, { error: "forbidden origin" });
         return;
       }
-      // 3) Token opsional (setting "apiToken") untuk lapisan tambahan.
-      //    Perbandingan constant-time (timingSafeEqual).
-      const apiToken = getSetting("apiToken", "");
-      if (apiToken && !tokenMatches(req.headers["x-memoria-token"], apiToken)) {
-        sendJson(res, 401, { error: "invalid token (x-memoria-token header)" });
+      // 3) API token (on by default, see auth.ts). One-time login link
+      //    /?token=… stores an HttpOnly cookie and redirects to the dashboard.
+      if (req.method === "GET" && url.pathname === "/" && url.searchParams.has("token")) {
+        const given = url.searchParams.get("token") || "";
+        if (safeEqual(given, getApiToken())) {
+          res.writeHead(302, { "Set-Cookie": tokenCookieHeader(given), Location: "/", "Cache-Control": "no-store" });
+          res.end();
+          return;
+        }
+        sendJson(res, 401, { error: "invalid token" });
+        return;
+      }
+      // Static assets (HTML/JS/CSS/images) contain no data and stay public so
+      // the dashboard can explain how to sign in; /api and /mcp need the token.
+      const needsAuth = url.pathname.startsWith("/api/") || url.pathname === "/mcp";
+      if (needsAuth && req.method !== "OPTIONS" && !isAuthorized(req)) {
+        sendJson(res, 401, { error: "unauthorized: open the dashboard link printed by `memoria server`, or send the x-memoria-token header", auth: true });
         return;
       }
       // M8 (audit): endpoint berat dilindungi in-flight guard per-path —
@@ -564,6 +569,7 @@ export function startHttpServer(): Promise<void> {
             globalPalette: getSetting("globalPalette", "1"),
             reviewMode: getSetting("reviewMode", "0"),
             autoTriage: getSetting("autoTriage", "1"),
+            apiTokenRequired: getSetting("apiTokenRequired", "1"),
             weeklyDigest: getSetting("weeklyDigest", "1"),
             autoStartLogin: getSetting("autoStartLogin", "1"),
             shortcutQuick: getSetting("shortcutQuick", "CommandOrControl+Shift+M"),
@@ -606,8 +612,8 @@ export function startHttpServer(): Promise<void> {
         if (body.key && body.value !== undefined) {
           // Secret (API key & webhook) disimpan terenkripsi bila safeStorage
           // tersedia (Keychain/DPAPI); value kosong = hapus.
-          const secretKeys = ["openaiApiKey", "notifyDiscordUrl", "notifyTelegramToken", "notifyGenericUrl"];
-          if (secretKeys.includes(String(body.key))) {
+          const { SECRET_SETTING_KEYS } = await import("./store/secure");
+          if (SECRET_SETTING_KEYS.includes(String(body.key))) {
             const { encryptSecret } = await import("./store/secure");
             const v = String(body.value);
             if (!v) {
@@ -941,7 +947,18 @@ export function startHttpServer(): Promise<void> {
   // Bind eksplisit ke loopback — tanpa ini Node bind ke semua interface (LAN ikut kebuka).
   return new Promise<void>((resolve) => {
     server.listen(port, "127.0.0.1", () => {
-      console.log(`[memoria] HTTP API aktif di http://127.0.0.1:${port} (khusus mesin ini)`);
+      console.log(`[memoria] HTTP API on http://127.0.0.1:${port} (this machine only)`);
+      try {
+        getApiToken(); // create the token file on first start
+        const { upgradePlaintextSecrets } = require("./store/secure") as typeof import("./store/secure");
+        const upgraded = upgradePlaintextSecrets();
+        if (upgraded.length) console.log(`[memoria] Encrypted secrets stored in plaintext by older versions: ${upgraded.join(", ")}`);
+        const { refreshHttpIntegrations } = require("./integrate") as typeof import("./integrate");
+        const fixed = refreshHttpIntegrations();
+        if (fixed.length) console.log(`[memoria] Added API token header to MCP config: ${fixed.join(", ")}`);
+      } catch (err) {
+        console.warn("[memoria] api token:", err instanceof Error ? err.message : err);
+      }
       resolve();
     });
   });

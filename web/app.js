@@ -38,8 +38,21 @@ async function api(path, opts = {}) {
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch { data = { error: text }; }
+  if (res.status === 401 && data.auth) showSignInHint();
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
+}
+
+/* The local API needs a token (cookie). Electron sets it automatically; in a
+ * plain browser the user opens the one-time link that `memoria server` prints. */
+function showSignInHint() {
+  if (document.getElementById("signInHint")) return;
+  const el = document.createElement("div");
+  el.id = "signInHint";
+  el.setAttribute("role", "alert");
+  el.style.cssText = "position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:9999;max-width:560px;padding:12px 16px;border-radius:10px;background:var(--card, #1b1d22);border:1px solid var(--border, #333);color:var(--text, #eee);font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.35)";
+  el.innerHTML = `<b>${esc(t("Sign in required"))}</b><div style="margin-top:4px">${esc(t("Open the dashboard link printed by `memoria server` (it contains ?token=…). Run `memoria token` to print it again."))}</div>`;
+  document.body.appendChild(el);
 }
 
 function fmtDate(ts) {
