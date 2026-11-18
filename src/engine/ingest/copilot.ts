@@ -5,8 +5,9 @@ import {
   ensureProject,
   getSourceOffset,
   setSourceOffset,
+  seqAllocator,
 } from "../store/db";
-import { projectSlugFromCwd } from "./util";
+import { projectSlugFromCwd, stripInjectedTags } from "./util";
 
 export function scanCopilot(dbPath: string): { messages: number } {
   if (!fs.existsSync(dbPath)) return { messages: 0 };
@@ -34,6 +35,9 @@ export function scanCopilot(dbPath: string): { messages: number } {
     }
 
     let total = 0;
+    // seq per session from the allocator: `seq: total` restarted at 0 every
+    // scan, so new messages collided with stored ones and were dropped.
+    const nextSeq = seqAllocator("copilot");
     for (const row of rows as any[]) {
       const content = typeof row[contentCol] === "string" ? row[contentCol] : JSON.stringify(row[contentCol] ?? "");
       if (!content || content === "{}" || content === "[]") continue;
@@ -54,9 +58,9 @@ export function scanCopilot(dbPath: string): { messages: number } {
         sessionId,
         projectId,
         role,
-        content: content.slice(0, 10000),
+        content: stripInjectedTags(content).slice(0, 10000),
         ts,
-        seq: total,
+        seq: nextSeq(sessionId),
       });
       total++;
     }

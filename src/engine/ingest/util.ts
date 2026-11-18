@@ -69,6 +69,34 @@ export function stripInjectedTags(text: string): string {
   return text.replace(INJECTED_TAG_RE, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** Agent todo lists (Claude Code `TodoWrite`, OpenCode `todowrite`) as a
+ * markdown checklist. These are the agent's own task tracking, so they are
+ * the most reliable task signal available without an LLM; the heuristic
+ * extractor already understands `- [ ]` / `- [x]`. */
+export function todosToChecklist(todos: unknown): string {
+  if (!Array.isArray(todos)) return "";
+  const lines: string[] = [];
+  for (const t of todos) {
+    if (!t || typeof t !== "object") continue;
+    const content = String((t as any).content ?? (t as any).text ?? (t as any).title ?? "").replace(/\s+/g, " ").trim();
+    if (!content) continue;
+    const status = String((t as any).status ?? "").toLowerCase();
+    if (status === "cancelled" || status === "canceled") continue;
+    lines.push(`- [${status === "completed" || status === "done" ? "x" : " "}] ${content}`);
+  }
+  return lines.join("\n");
+}
+
+/** Todo checklist from Claude message content blocks (tool_use TodoWrite). */
+export function todosFromContent(content: unknown): string {
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((b) => b && typeof b === "object" && (b as any).type === "tool_use" && /^todo_?write$/i.test(String((b as any).name || "")))
+    .map((b) => todosToChecklist((b as any).input?.todos))
+    .filter(Boolean)
+    .join("\n");
+}
+
 export function projectSlugFromCwd(cwd?: string): string {
   if (!cwd) return "_unknown";
   return cwd.replace(/[\\/:]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "_unknown";

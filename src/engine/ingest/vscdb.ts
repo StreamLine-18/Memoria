@@ -24,11 +24,9 @@ function textFromBlocks(content: unknown): string {
           if ((c.type === "tool_result" || c.type === "toolInvocation" || c.type === "tool") && c.content) {
             return textFromBlocks(c.content);
           }
-          if (c.type === "tool_use" || c.type === "tool_call") {
-            const n = c.name || c.toolName || "";
-            const input = c.input ? textFromBlocks(c.input) : "";
-            return `[tool] ${n}${input ? ": " + input : ""}`;
-          }
+          // Tool calls are not part of what the person or agent said; they
+          // used to be appended as "[tool] name: input" to the message text.
+          if (c.type === "tool_use" || c.type === "tool_call") return "";
         }
         return "";
       })
@@ -66,7 +64,12 @@ function walkMessages(node: any, out: Msg[]): void {
   if (typeof node !== "object") return;
   if (isMessageLike(node)) {
     const text = typeof node.text === "string" ? node.text.trim() : textFromBlocks(node.content);
-    const role = roleOf(node);
+    // A message made only of tool results is tool output, whatever its role.
+    const toolOnly =
+      Array.isArray(node.content) &&
+      node.content.length > 0 &&
+      node.content.every((b: any) => b && typeof b === "object" && /^(tool_result|toolInvocation|tool|tool_use|tool_call)$/.test(String(b.type)));
+    const role = toolOnly ? "tool" : roleOf(node);
     if (text && role !== "unknown") {
       const ts =
         Number(node.ts || node.timestamp || node.createdAt || node.time) || Date.now();

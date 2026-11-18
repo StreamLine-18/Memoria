@@ -50,6 +50,18 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Capture
+- **Antigravity conversations are captured** (`ingest/antigravity-brain.ts`): `~/.gemini/antigravity*/brain/<id>/…/transcript_full.jsonl` (IDE, CLI, agent). Previously only IDE log files were read and the brain transcripts were picked up by the generic Gemini scanner as user-only rows with no project. User requests are unwrapped from `<USER_REQUEST>`, planner responses are assistant rows, tool steps are tool rows, SYSTEM steps are skipped, and the project is inferred from the first absolute path (nearest folder with `.git`/`package.json`). On one real machine: 45 conversations, 17,103 rows.
+- **Agent todo lists become tasks**: Claude Code `TodoWrite` and OpenCode `todowrite` are stored as `- [ ]` / `- [x]` checklists, which Tier 0 turns into task memories.
+- **Tool output separated in every parser**: OpenCode bash calls (were appended to assistant text as `[command] …`), Gemini/generic `tool`/`function` rows, Cursor/VS Code/Windsurf tool-only messages and tool calls; OpenCode synthetic text parts are skipped.
+
+### Fixed
+- Copilot used `seq = 0, 1, …` per scan, so new messages collided with stored ones and were dropped; it now uses the per-session allocator.
+- Noise rule for sentences split inside markdown links (`docs/X.md](file:///…)`).
+
+### Tests
+- `tests/ingest.test.mjs`: fixtures for Claude, Codex, OpenCode, Copilot, Gemini/generic, Cursor/VS Code (vscdb), and Antigravity: roles, tag stripping, checklists, unique seq, no duplicates on re-scan.
+
 ### Security
 - **Local API token on by default** (`auth.ts`): random token in `<dataDir>/api-token` (0600). `/api/*` and `/mcp` require the `x-memoria-token` header or the `memoria_token` cookie (HttpOnly, SameSite=Strict); static dashboard files stay public so the dashboard can explain how to sign in. Electron sets the cookie automatically; `memoria server` prints a one-time sign-in link; new `memoria token` command. Existing Cursor / VS Code HTTP MCP entries get the token header added on startup. Toggle: Settings → Require API token (`apiTokenRequired`).
 - **Secrets encrypted in CLI / npm mode** (`store/secretkey.ts`): AES-256-GCM (`kc1:`) with a master key in the macOS Keychain, Linux Secret Service, or Windows DPAPI (owner-only file fallback); the key is passed via stdin, never argv. Plaintext secrets from older versions are encrypted on startup. Sync can now be set up from the CLI without a passphrase.
