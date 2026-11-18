@@ -44,17 +44,11 @@ async function runHousekeepingSoon(): Promise<void> {
     const { extractQueue, runHousekeeping } = await import("./extract/extractor");
     runHousekeeping();
     await extractQueue(false);
-    // Sekali per proses: promosikan draft heuristik lama yang kini memenuhi
-    // ambang sinyal kuat (upgrade data lama tanpa re-ekstrak transkrip).
+    // Sekali per proses: auto-triage antrean draft (noise/duplikat → arsip,
+    // sinyal kuat/terkonfirmasi → active). Tercatat per batch & bisa di-undo.
     if (!heuristicBackfillDone) {
       heuristicBackfillDone = true;
-      try {
-        const { promoteLegacyHeuristicDrafts } = await import("./extract/heuristic");
-        const r = promoteLegacyHeuristicDrafts(2000);
-        if (r.promoted) console.log(`[memoria] Heuristic drafts promoted: ${r.promoted}/${r.scanned}`);
-      } catch {
-        heuristicBackfillDone = false; /* coba lagi nanti */
-      }
+      autoTriage();
     }
     try {
       const { processEmbeddingBackfill } = await import("./sync/embed");
@@ -75,7 +69,22 @@ async function runHousekeepingSoon(): Promise<void> {
   }
 }
 
+function autoTriage(): void {
+  if (!getBoolSetting("autoTriage", true)) return;
+  try {
+    const { runTriage } = require("./extract/triage") as typeof import("./extract/triage");
+    const r = runTriage();
+    if (r.promoted || r.archived) {
+      console.log(`[memoria] Auto-triage: ${r.promoted} promoted, ${r.archived} archived, ${r.kept} left for review`);
+      emitEvent("memory", { triage: r.batch });
+    }
+  } catch (err) {
+    console.warn("[memoria] auto-triage:", err instanceof Error ? err.message : err);
+  }
+}
+
 function dailyMaintenance(): void {
+  autoTriage();
   try {
     if (getBoolSetting("autoArchive", true)) {
       archiveStaleEligibles();
