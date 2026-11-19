@@ -17,7 +17,7 @@ function home(): string {
   return os.homedir();
 }
 
-function nodeCommand(): string {
+export function nodeCommand(): string {
   const probe = spawnSync("node", ["-v"], { windowsHide: true, timeout: 5000 });
   if (probe.status === 0) return "node";
   return process.execPath;
@@ -49,8 +49,18 @@ function claudeTarget(): ToolTarget {
         windowsHide: true,
         encoding: "utf8",
       });
-      if (r.status === 0) return "ok";
-      return r.stderr?.toString() || "gagal (pastikan claude CLI terinstal)";
+      // "already exists" from a previous registration is fine.
+      const ok = r.status === 0 || /already exists/i.test(String(r.stderr || ""));
+      // Native hooks: resume context at SessionStart, import on Stop /
+      // PreCompact / SessionEnd. Installed even without the claude CLI.
+      try {
+        const { installClaudeHooks } = require("./hooks/claude") as typeof import("./hooks/claude");
+        installClaudeHooks(cmd, script);
+      } catch {
+        /* hooks are optional */
+      }
+      if (ok) return "ok";
+      return r.stderr?.toString() || "failed (is the claude CLI installed?)";
     },
   };
 }

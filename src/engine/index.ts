@@ -159,6 +159,25 @@ async function main(): Promise<void> {
       await new Promise(() => {});
       break;
     }
+    case "hook": {
+      // Called by Claude Code (see hooks/claude.ts). Never fails the caller.
+      const { hookMain } = await import("./hooks/claude");
+      await hookMain(process.argv[3] || "");
+      process.exit(0);
+    }
+    case "hooks": {
+      const sub = process.argv[3] || "status";
+      const h = await import("./hooks/claude");
+      if (sub === "install") {
+        const { engineScriptPath, nodeCommand } = await import("./integrate");
+        console.log(h.installClaudeHooks(nodeCommand(), engineScriptPath()).message);
+      } else if (sub === "remove") {
+        console.log(h.removeClaudeHooks().message);
+      } else {
+        console.log(h.claudeHooksInstalled() ? "Claude Code hooks: installed" : "Claude Code hooks: not installed (run: memoria hooks install)");
+      }
+      break;
+    }
     case "token": {
       // Print the local API token and the one-time dashboard sign-in link.
       ensureDb();

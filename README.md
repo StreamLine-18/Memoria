@@ -217,6 +217,10 @@ mention a file), and `build_context` (one ready-to-paste context block with a
 character budget). When a newer decision replaces an older one about the same
 subject, the old one is marked superseded and drops out of the resume block.
 
+**Claude Code hooks** are installed together with the MCP server: a new Claude Code session
+starts with the project's resume context, and each turn, compaction, and session end is
+imported immediately (`memoria hooks install | remove | status`).
+
 ### 4 · CLI
 
 ```bash
