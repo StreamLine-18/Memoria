@@ -50,6 +50,12 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-19 — Editors & Trust
+
+**VS Code and Cursor captured out of the box, and sync you can revoke.** Copilot Chat sessions and Cursor Composer conversations are now read from where the editors actually store them, and Sync gains key rotation, device revocation, and a clock guard.
+
+> Upgrade notes: VS Code and Cursor capture are now on by default; turn them off in Settings → Sources if you do not want them. After `memoria sync rotate` or `revoke`, run `memoria sync setup --join <new code> --force` on every device you keep.
+
 ### Sync M5 (hardening)
 - `memoria sync rotate` replaces the group key (same storage: keychain or passphrase) and republishes a full export to the shared folder. `memoria sync revoke <device-id-prefix>` marks a device as revoked and rotates. `memoria sync devices` lists devices with their last bundle. Kept devices re-join with `sync setup --join <new code> --force`.
 - Bundles written with a previous group key or by a revoked device are skipped before decryption instead of being reported as folder errors; re-joining records the old group so its leftovers are skipped too.
