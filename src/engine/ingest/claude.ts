@@ -10,7 +10,14 @@ import { withTx } from "../store/tx";
 import { walkFiles, safeJson, textFromContent, projectSlugFromCwd, readLinesIncremental, isToolResultOnly, stripInjectedTags, todosFromContent } from "./util";
 
 export async function scanClaude(root: string, log?: (msg: string) => void): Promise<{ files: number; lines: number }> {
-  const files = walkFiles(root, [".jsonl"]);
+  // A single transcript file is accepted too (Claude Code hooks pass transcript_path).
+  let isFile = false;
+  try {
+    isFile = fs.statSync(root).isFile();
+  } catch {
+    /* missing root: walkFiles returns [] */
+  }
+  const files = isFile ? (root.endsWith(".jsonl") ? [root] : []) : walkFiles(root, [".jsonl"]);
   let totalLines = 0;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];

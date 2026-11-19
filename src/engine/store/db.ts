@@ -74,6 +74,9 @@ export function initDb(dataDir: string): DatabaseSync {
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const dbPath = path.join(dataDir, "memory.db");
   db = new DatabaseSync(dbPath);
+  // Several processes share the database (app, MCP stdio, Claude Code hooks):
+  // wait for a lock instead of failing with SQLITE_BUSY.
+  db.exec("PRAGMA busy_timeout = 5000");
   restrictToOwner(dataDir);
   db.exec(`
     PRAGMA journal_mode = WAL;

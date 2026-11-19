@@ -50,6 +50,16 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Claude Code hooks
+- **Native Claude Code hooks** (`hooks/claude.ts`), installed when Claude Code is connected (Integrations, onboarding) or with `memoria hooks install` (`remove`, `status`):
+  - `SessionStart` (sync, 10 s timeout): prints the project's resume context, which Claude Code adds to the new session — no waiting for the file watcher or an AGENTS.md refresh.
+  - `Stop` (async): imports the session transcript right away.
+  - `PreCompact` (async): import + deterministic work snapshot + resume block before the context is compacted.
+  - `SessionEnd` (async): import + extraction + AGENTS.md/CLAUDE.md refresh.
+  Merged into `~/.claude/settings.json` without touching other hooks; idempotent; a settings file that cannot be parsed is never modified. Only transcripts under `~/.claude/projects` are read. Engine logs go to stderr so SessionStart stdout is only the context; the hook always exits 0. Setting `claudeHooks` = `0` turns them into no-ops.
+- SQLite `busy_timeout` (5 s): the app, MCP stdio servers, and hooks share the database.
+- `scanClaude` accepts a single transcript file.
+
 ### Onboarding
 - **First-run setup assistant** (`onboarding.ts`, dashboard): detects which AI tools have sessions on this machine, connects the selected ones (capture + MCP registration), imports past sessions in the background (newest first, Tier 0 offline, then auto-triage), and ends with "Here is what Memoria remembers" for the most recent projects. Shown once on installs without memories; Settings → Run setup again. API: `GET /api/onboarding`, `POST /api/onboarding/start`, `GET /api/onboarding/summary`, `POST /api/onboarding/skip`.
 
