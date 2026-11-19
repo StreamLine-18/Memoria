@@ -401,7 +401,33 @@ export function startHttpServer(): Promise<void> {
           drafts,
           week, git, tasks: { open: tasks.open.map(slim), done: tasks.done.map(slim) },
           recentMemories,
+          brain: await (async () => {
+            if (!rec.path) return null;
+            const { brainPath, parseBrain } = await import("./team/brain");
+            const f = brainPath(rec.path);
+            const exists = fs.existsSync(f);
+            return { export: getSetting(`brain:${rec.slug}:export`, "0") === "1", exists, entries: exists ? parseBrain(fs.readFileSync(f, "utf8")).length : 0 };
+          })(),
         });
+      } else if (url.pathname === "/api/projects/brain" && req.method === "POST") {
+        // Opt a project in/out of .memoria/brain.md; opting in exports now.
+        const body = await readBody(req);
+        const rec = projectRecord(String(body.slug || ""));
+        if (!rec) {
+          sendJson(res, 404, { error: "project not found" });
+          return;
+        }
+        const brain = await import("./team/brain");
+        brain.setBrainExport(rec.slug, !!body.export);
+        if (!body.export) {
+          sendJson(res, 200, { ok: true, export: false });
+          return;
+        }
+        try {
+          sendJson(res, 200, { ok: true, export: true, ...brain.exportBrain(rec.slug) });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
       } else if (url.pathname === "/api/tasks" && req.method === "GET") {
         const slug = url.searchParams.get("slug") || "";
         const proj = slug ? resolveProject(slug) : null;
