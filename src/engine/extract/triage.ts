@@ -93,8 +93,13 @@ export function planTriage(opts: { now?: number; ttlDays?: number; projectId?: n
   // Draft yang dipertahankan per proyek → pembanding duplikat + hitung dukungan.
   const keptByProject = new Map<string, Array<{ item: TriagePlanItem; key: string; sessions: Set<string>; tools: Set<string> }>>();
 
+  const userPatterns = userNoisePatterns();
   for (const r of drafts) {
     const base = { id: r.id, projectId: r.project_id, kind: r.kind, content: r.content };
+    if (userPatterns.length && matchesUserNoise(r.content, userPatterns)) {
+      plan.push({ ...base, action: "archive", reason: "noise:user", score: 0 });
+      continue;
+    }
     const t = rescoreStored({ kind: r.kind, content: r.content, importance: r.importance });
     if (t.decision === "archive") {
       plan.push({ ...base, action: "archive", reason: t.reason, score: t.score });
@@ -145,8 +150,133 @@ export function planTriage(opts: { now?: number; ttlDays?: number; projectId?: n
         k.item.reason = "expired";
       }
     }
+    // Inbox cap per project: the inbox must never grow without bound. Keep
+    // the best-scoring uncertain drafts, archive the rest.
+    const cap = draftCapPerProject();
+    const keep = list.filter((k) => k.item.action === "keep").sort((a, b) => b.item.score - a.item.score);
+    for (const k of keep.slice(cap)) {
+      k.item.action = "archive";
+      k.item.reason = "over-cap";
+    }
   }
   return plan;
+}
+
+export function draftCapPerProject(): number {
+  const n = Number(db.getSetting("draftCapPerProject", "50"));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 50;
+}
+
+/* ---------- User noise patterns ("always archive drafts like this") ---------- */
+
+export function userNoisePatterns(): string[] {
+  try {
+    const v = JSON.parse(db.getSetting("userNoisePatterns", "[]"));
+    return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Plain, case-insensitive substring (never a regex: no injection, no ReDoS). */
+export function matchesUserNoise(content: string, patterns = userNoisePatterns()): string | null {
+  const lc = (content || "").toLowerCase();
+  for (const p of patterns) if (lc.includes(p.toLowerCase())) return p;
+  return null;
+}
+
+/** Add a pattern and archive every draft that matches it, as one undoable batch. */
+export function addUserNoisePattern(pattern: string): { pattern: string; archived: number; batch: string | null } {
+  const p = String(pattern || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  if (p.length < 3) throw new Error("pattern must be at least 3 characters");
+  const list = userNoisePatterns();
+  if (!list.some((x) => x.toLowerCase() === p.toLowerCase())) db.setSetting("userNoisePatterns", JSON.stringify([...list, p].slice(-200)));
+  const drafts = db.getDb()
+    .prepare("SELECT id, content, importance, status FROM memories WHERE archived = 0 AND status = 'draft'")
+    .all() as Array<{ id: number; content: string; importance: number; status: string }>;
+  const hits = drafts.filter((r) => matchesUserNoise(r.content, [p]));
+  if (!hits.length) return { pattern: p, archived: 0, batch: null };
+  const batch = writeBatch(hits.map((h) => ({ id: h.id, action: "archive" as const, reason: "noise:user", prevStatus: h.status, prevImportance: h.importance })));
+  return { pattern: p, archived: hits.length, batch };
+}
+
+export function removeUserNoisePattern(pattern: string): string[] {
+  const next = userNoisePatterns().filter((x) => x.toLowerCase() !== String(pattern || "").toLowerCase());
+  db.setSetting("userNoisePatterns", JSON.stringify(next));
+  return next;
+}
+
+/* ---------- Stale tasks ---------- */
+
+export function staleTaskDays(): number {
+  const n = Number(db.getSetting("staleTaskDays", "30"));
+  return Number.isFinite(n) && n > 0 ? n : 30;
+}
+
+/** Open tasks nobody has mentioned for staleTaskDays: archived (undoable),
+ * so "Open tasks" in the resume block stays about current work. A task is
+ * "mentioned" when a later transcript contains most of its keywords. */
+export function archiveStaleTasks(opts: { now?: number; dryRun?: boolean } = {}): { archived: number; batch: string | null; ids: number[] } {
+  const now = opts.now ?? Date.now();
+  const cutoff = now - staleTaskDays() * DAY;
+  const d = db.getDb();
+  const tasks = d
+    .prepare(
+      `SELECT id, project_id, content, importance, status, created_at FROM memories
+       WHERE kind = 'task_pending' AND archived = 0 AND COALESCE(resolved_at, 0) = 0 AND created_at < ?`
+    )
+    .all(cutoff) as Array<{ id: number; project_id: number | null; content: string; importance: number; status: string; created_at: number }>;
+  const stale: typeof tasks = [];
+  for (const t of tasks) {
+    const words = (t.content.toLowerCase().match(/[a-z0-9_-]{4,}/g) || []).filter((w) => !STOP.has(w));
+    const kws = [...new Set(words)].slice(0, 5);
+    if (!kws.length) continue;
+    const need = Math.min(kws.length, Math.max(2, Math.ceil(kws.length * 0.6)));
+    const recent = d
+      .prepare("SELECT content FROM transcripts WHERE project_id IS ? AND ts > ? AND role IN ('user', 'assistant') ORDER BY ts DESC LIMIT 2000")
+      .all(t.project_id, Math.max(t.created_at + DAY, cutoff)) as Array<{ content: string }>;
+    const mentioned = recent.some((r) => {
+      const lc = r.content.toLowerCase();
+      return kws.filter((k) => lc.includes(k)).length >= need;
+    });
+    if (!mentioned) stale.push(t);
+  }
+  if (opts.dryRun || !stale.length) return { archived: stale.length, batch: null, ids: stale.map((s) => s.id) };
+  const batch = writeBatch(stale.map((s) => ({ id: s.id, action: "archive" as const, reason: "stale-task", prevStatus: s.status, prevImportance: s.importance })));
+  return { archived: stale.length, batch, ids: stale.map((s) => s.id) };
+}
+
+const STOP = new Set(["yang", "dengan", "untuk", "dari", "pada", "this", "that", "with", "from", "into", "akan", "perlu", "harus", "todo", "tambahkan", "buat", "bikin", "need", "should", "make", "next", "step"]);
+
+/** Apply archive/promote changes as one logged, undoable batch. */
+function writeBatch(items: Array<{ id: number; action: "archive" | "promote"; reason: string; prevStatus: string; prevImportance: number }>): string {
+  const batch = `t-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  const d = db.getDb();
+  const log = d.prepare(
+    "INSERT INTO triage_log (batch, memory_id, action, reason, prev_status, prev_archived, prev_importance, ts) VALUES (?, ?, ?, ?, ?, 0, ?, ?)"
+  );
+  const ts = Date.now();
+  d.exec("BEGIN");
+  try {
+    for (const it of items) {
+      log.run(batch, it.id, it.action, it.reason, it.prevStatus, it.prevImportance, ts);
+      if (it.action === "promote") db.approveMemory(it.id);
+      else db.archiveMemory(it.id, true);
+    }
+    d.exec("COMMIT");
+  } catch (err) {
+    try {
+      d.exec("ROLLBACK");
+    } catch {
+      /* already rolled back */
+    }
+    throw err;
+  }
+  db.setSetting("lastTriageBatch", batch);
+  db.setSetting("lastTriageAt", String(ts));
+  const archived = items.filter((i) => i.action === "archive").length;
+  db.setSetting("triageArchivedTotal", String((Number(db.getSetting("triageArchivedTotal", "0")) || 0) + archived));
+  return batch;
 }
 
 function summarize(plan: TriagePlanItem[], batch: string | null, dryRun: boolean): TriageSummary {
@@ -217,8 +347,8 @@ export function undoTriage(batch?: string): { batch: string | null; restored: nu
   if (!target) return { batch: null, restored: 0 };
   const d = db.getDb();
   const rows = d
-    .prepare("SELECT memory_id, action, prev_importance FROM triage_log WHERE batch = ?")
-    .all(target) as Array<{ memory_id: number; action: string; prev_importance: number | null }>;
+    .prepare("SELECT memory_id, action, prev_importance, prev_status FROM triage_log WHERE batch = ?")
+    .all(target) as Array<{ memory_id: number; action: string; prev_importance: number | null; prev_status: string | null }>;
   let restored = 0;
   let unarchived = 0;
   d.exec("BEGIN");
@@ -229,7 +359,9 @@ export function undoTriage(batch?: string): { batch: string | null; restored: nu
         db.archiveMemory(r.memory_id, false);
         unarchived++;
       }
-      d.prepare("UPDATE memories SET status = 'draft', updated_at = ?, updated_by = ? WHERE id = ?").run(Date.now(), db.getDeviceId(), r.memory_id);
+      // Back to the status it had before (stale-task archiving touches active tasks).
+      const prevStatus = r.prev_status === "active" ? "active" : "draft";
+      d.prepare("UPDATE memories SET status = ?, updated_at = ?, updated_by = ? WHERE id = ?").run(prevStatus, Date.now(), db.getDeviceId(), r.memory_id);
       if (r.prev_importance != null) db.updateMemory(r.memory_id, { importance: r.prev_importance });
       restored++;
     }

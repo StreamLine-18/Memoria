@@ -2,6 +2,7 @@ import { getDb, getPendingExtraction, markExtracted, projectSlugById, getBoolSet
 import { getExtractProvider, getEmbedProvider, embedManyVia } from "./provider";
 import { addMemoryWithDedupe } from "./dedupe";
 import { triageCandidate } from "./heuristic";
+import { matchesUserNoise, userNoisePatterns } from "./triage";
 
 let running = false;
 let lastAttempt = 0;
@@ -73,6 +74,7 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
     // ke ACTIVE agar resume/recall/link lintas-AI langsung jalan saat limit-hopping;
     // sisanya tetap draft (review queue). Transparan via origin "heuristic".
     const heuristic = extractProv.id === "heuristic";
+    const userPatterns = heuristic ? userNoisePatterns() : [];
     const defaultStatus = heuristic ? "draft" : getBoolSetting("reviewMode", false) ? "draft" : "active";
     const origin = heuristic ? "heuristic" : "llm";
 
@@ -116,6 +118,8 @@ export async function extractQueue(force = false, opts: { order?: "asc" | "desc"
           let status = defaultStatus;
           let importance = mem.importance;
           if (heuristic) {
+            // "Always archive drafts like this" patterns from the inbox.
+            if (userPatterns.length && matchesUserNoise(mem.content, userPatterns)) return;
             const t = triageCandidate(mem as any);
             // archive = noise / skor rendah: tidak disimpan sama sekali
             // (transkrip asal tetap ada, bisa diekstrak ulang).

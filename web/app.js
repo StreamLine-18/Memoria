@@ -763,14 +763,45 @@ async function renderDraftGroups() {
   try { data = await api("/api/drafts/groups"); } catch { wrap.style.display = "none"; return; }
   if (!data.groups.length) { wrap.style.display = "none"; return; }
   wrap.style.display = "";
+  const patterns = data.patterns || [];
+  const patternRows = patterns.length ? `<div class="card-desc" style="margin:12px 0 6px">${esc(t("Drafts that start the same way"))}</div>
+    <div class="list">${patterns.map((p, i) => `
+      <div style="display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--line, rgba(127,127,127,.2)); border-radius:8px">
+        <div style="flex:1; min-width:0; font-family:var(--mono); font-size:12px">“${esc(p.pattern)} …” <span class="muted">(${p.ids.length})</span></div>
+        <button class="btn" data-pattern-act="archive" data-pattern="${i}">${esc(t("Archive all"))}</button>
+        <button class="btn danger-ghost" data-pattern-act="always" data-pattern="${i}" title="${esc(t("Archive these and every future draft that contains this text"))}">${esc(t("Always archive"))}</button>
+      </div>`).join("")}</div>` : "";
   wrap.innerHTML = `<div class="card-desc" style="margin:0 0 6px">${esc(t("Review by group — approve or archive a whole group in one click"))}</div>
     <div class="list">${data.groups.slice(0, 12).map((g, i) => `
       <div style="display:flex; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--line, rgba(127,127,127,.2)); border-radius:8px">
         <div style="flex:1; min-width:0"><b>${esc(g.project)}</b> · ${esc(kindName(g.kind))} <span class="muted">(${g.ids.length})</span></div>
         <button class="btn" data-group-act="approve" data-group="${i}">${esc(t("Approve all"))}</button>
         <button class="btn danger-ghost" data-group-act="archive" data-group="${i}">${esc(t("Archive all"))}</button>
-      </div>`).join("")}</div>`;
+      </div>`).join("")}</div>${patternRows}
+    <div class="muted" style="font-size:11.5px; margin-top:8px">${esc(t("Keyboard: j / k move, a approve, x archive, space select"))}</div>`;
   wrap.onclick = async (e) => {
+    const pbtn = e.target.closest("[data-pattern-act]");
+    if (pbtn) {
+      const p = patterns[Number(pbtn.dataset.pattern)];
+      pbtn.disabled = true;
+      try {
+        if (pbtn.dataset.patternAct === "always") {
+          const r = await api("/api/drafts/noise-patterns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pattern: p.pattern }) });
+          toast(t("Archived {0}; future drafts containing this text are archived automatically", r.archived));
+        } else {
+          const r = await api("/api/memories/batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "archive", ids: p.ids }) });
+          toast(t("Archived {0}", r.affected));
+        }
+        loadStats();
+        renderMemories();
+        renderDraftGroups();
+        refreshTriageInfo();
+      } catch (err) {
+        toast(t("Failed: ") + err.message, "err");
+        pbtn.disabled = false;
+      }
+      return;
+    }
     const btn = e.target.closest("[data-group-act]");
     if (!btn) return;
     const g = data.groups[Number(btn.dataset.group)];
@@ -2799,6 +2830,49 @@ async function onbResult(s) {
 }
 
 document.getElementById("btnRunSetup")?.addEventListener("click", openOnboarding);
+
+/* Inbox keyboard review: j/k move, a approve, x archive, space toggles the
+ * checkbox. Only on the Pending approval tab, never while typing. */
+let draftFocus = -1;
+document.addEventListener("keydown", async (e) => {
+  if (state.view !== "memories" || state.memTab !== "draft") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = (e.target && e.target.tagName) || "";
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+  if (document.getElementById("onboarding") || document.querySelector("#overlay.show")) return;
+  const rows = [...document.querySelectorAll("#memoriesList .mem")];
+  if (!rows.length) return;
+  const focusRow = (i) => {
+    draftFocus = Math.max(0, Math.min(rows.length - 1, i));
+    rows.forEach((r, j) => (r.style.outline = j === draftFocus ? "2px solid var(--accent)" : ""));
+    rows[draftFocus].scrollIntoView({ block: "nearest" });
+  };
+  const key = e.key.toLowerCase();
+  if (key === "j" || key === "arrowdown") { e.preventDefault(); focusRow(draftFocus + 1); return; }
+  if (key === "k" || key === "arrowup") { e.preventDefault(); focusRow(draftFocus - 1); return; }
+  if (draftFocus < 0 || !rows[draftFocus]) return;
+  const id = Number(rows[draftFocus].dataset.id);
+  if (key === " ") {
+    e.preventDefault();
+    const cb = rows[draftFocus].querySelector(".mem-select");
+    if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change", { bubbles: true })); }
+    return;
+  }
+  if (key !== "a" && key !== "x") return;
+  e.preventDefault();
+  try {
+    await api("/api/memories/batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: key === "a" ? "approve" : "archive", ids: [id] }) });
+    rows[draftFocus].remove();
+    const left = [...document.querySelectorAll("#memoriesList .mem")];
+    if (left.length) {
+      draftFocus = Math.min(draftFocus, left.length - 1);
+      left[draftFocus].style.outline = "2px solid var(--accent)";
+    }
+    loadStats();
+  } catch (err) {
+    toast(t("Failed: ") + err.message, "err");
+  }
+});
 
 (async function init() {
   await loadProjects();

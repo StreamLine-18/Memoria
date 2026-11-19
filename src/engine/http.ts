@@ -524,7 +524,43 @@ export function startHttpServer(): Promise<void> {
           if (!groups.has(key)) groups.set(key, { projectId: r.projectId, project: r.project || "(no project)", kind: r.kind, ids: [] });
           groups.get(key)!.ids.push(r.id);
         }
-        sendJson(res, 200, { groups: [...groups.values()].sort((a, b) => b.ids.length - a.ids.length), total: rows.length });
+        // Pattern groups: drafts that start the same way ("Jalankan build …",
+        // "The test suite …") usually share one fate; offer one-click archive
+        // and "always archive drafts like this".
+        const contents = getDb()
+          .prepare("SELECT id, content FROM memories WHERE archived = 0 AND status = 'draft'")
+          .all() as Array<{ id: number; content: string }>;
+        const byPrefix = new Map<string, number[]>();
+        for (const r of contents) {
+          const words = r.content.replace(/[`*_#>\[\]()"']/g, "").trim().split(/\s+/).slice(0, 3);
+          if (words.length < 3) continue;
+          const key = words.join(" ").toLowerCase();
+          if (!byPrefix.has(key)) byPrefix.set(key, []);
+          byPrefix.get(key)!.push(r.id);
+        }
+        const patterns = [...byPrefix.entries()]
+          .filter(([, ids]) => ids.length >= 3)
+          .map(([pattern, ids]) => ({ pattern, ids }))
+          .sort((a, b) => b.ids.length - a.ids.length)
+          .slice(0, 12);
+        sendJson(res, 200, { groups: [...groups.values()].sort((a, b) => b.ids.length - a.ids.length), patterns, total: rows.length });
+      } else if (url.pathname === "/api/drafts/noise-patterns" && req.method === "GET") {
+        const { userNoisePatterns } = await import("./extract/triage");
+        sendJson(res, 200, { patterns: userNoisePatterns() });
+      } else if (url.pathname === "/api/drafts/noise-patterns" && req.method === "POST") {
+        const body = await readBody(req);
+        const { addUserNoisePattern } = await import("./extract/triage");
+        try {
+          const r = addUserNoisePattern(String(body.pattern || ""));
+          if (r.archived) emitEvent("memory", { triage: r.batch });
+          sendJson(res, 200, { ok: true, ...r });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        }
+      } else if (url.pathname === "/api/drafts/noise-patterns" && req.method === "DELETE") {
+        const body = await readBody(req);
+        const { removeUserNoisePattern } = await import("./extract/triage");
+        sendJson(res, 200, { ok: true, patterns: removeUserNoisePattern(String(body.pattern || "")) });
       } else if (url.pathname === "/api/onboarding" && req.method === "GET") {
         const { detectTools, onboardingStatus } = await import("./onboarding");
         sendJson(res, 200, { status: onboardingStatus(), tools: detectTools() });

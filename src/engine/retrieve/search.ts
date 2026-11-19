@@ -210,6 +210,16 @@ export function invalidateCentrality(): void {
   centralityCache = null;
 }
 
+/** Count an agent fetching these memories (feeds the "used" ranking boost
+ * and protects them from forgetting-curve archiving). */
+export function touchMemories(ids: number[]): void {
+  const list = ids.filter((x) => Number.isInteger(x) && x > 0);
+  if (!list.length) return;
+  getDb()
+    .prepare(`UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id IN (${list.map(() => "?").join(",")})`)
+    .run(Date.now(), ...list);
+}
+
 export function projectContext(projectSlug: string, limit = 8): SearchHit[] {
   const memories = allMemories();
   const now = Date.now();
@@ -220,7 +230,10 @@ export function projectContext(projectSlug: string, limit = 8): SearchHit[] {
     if ((m.validTo || 0) > 0) continue;
     const ageDays = (now - m.createdAt) / 86400000;
     const recency = Math.exp(-ageDays / 14);
-    const score = m.importance * 0.7 + recency * 0.3;
+    // Memories agents actually fetched (recall / get_memory / file_context)
+    // are evidently useful: a small, capped boost.
+    const used = Math.min(0.1, Math.log1p(m.accessCount || 0) * 0.03);
+    const score = m.importance * 0.7 + recency * 0.3 + used;
     hits.push({
       id: m.id!,
       kind: m.kind,

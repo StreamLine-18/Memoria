@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ensureDb } from "../ingest/manager";
-import { searchMemories, projectContext } from "../retrieve/search";
+import { searchMemories, projectContext, touchMemories } from "../retrieve/search";
 import { ensureProject, memoryById, effectiveStatus, getDb, resolveProject, updateMemory, deleteMemory } from "../store/db";
 import { looksLikePath, projectSlugFromCwd } from "../ingest/util";
 import { getEmbedProvider } from "../extract/provider";
@@ -296,6 +296,7 @@ export function createMcpServer(): Server {
           return { content: [{ type: "text", text: `No memories mention ${p}.` }] };
         }
         const text = `Known about ${p}:\n` + hits.map((h) => `- #${h.id} [${h.kind}] ${h.content.replace(/\s+/g, " ")}`).join("\n");
+        touchMemories(hits.map((h) => h.id));
         recordContextServed("file_context", hits[0].projectId, text.length);
         return { content: [{ type: "text", text }] };
       }
@@ -313,6 +314,7 @@ export function createMcpServer(): Server {
           parts.push(m ? `#${id} [${m.kind}] ${m.content}` : `#${id} not found`);
         }
         const text = parts.join("\n\n");
+        touchMemories(ids);
         recordContextServed("get_memory", null, text.length);
         return { content: [{ type: "text", text }] };
       }
