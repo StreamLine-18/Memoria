@@ -50,6 +50,10 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-11-19 — Clear Tools
+
+**Every MCP tool parameter is described in English.**
+
 ### MCP
 - Tool parameter descriptions are now all in English (some were in Indonesian), and `limit`, `importance` and `maxChars` gained descriptions, so agents in any language call the tools correctly.
 
