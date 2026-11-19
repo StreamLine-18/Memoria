@@ -2195,7 +2195,7 @@ function updateEngineVisibility() {
   }
   if (hint) {
     const hints = {
-      local: t("No model, fully local. Rule-based extraction (review queue) + local hash embeddings."),
+      local: t("No model, fully local. Rule-based extraction with automatic triage + local hash embeddings."),
       auto: t("Uses Ollama when running, otherwise local heuristics/hash. Nothing leaves this machine."),
       ollama: t("Local LLM via Ollama for both extraction and semantic embeddings."),
       cloud: t("Uses the provider below for extraction and embeddings (data may leave this machine)."),
@@ -2644,8 +2644,134 @@ function setupLiveEvents() {
 }
 setupLiveEvents();
 
+/* ---------- First-run onboarding ----------
+ * detect tools → connect (capture + MCP registration) → import existing
+ * sessions in the background → show what Memoria remembers. Shown once, on
+ * installs without memories; "Run setup again" in Settings reopens it. */
+const ONB_PHASES = {
+  connecting: "Connecting your AI tools…",
+  scanning: "Reading your existing sessions…",
+  extracting: "Turning sessions into memories (no AI model needed)…",
+  triaging: "Filtering noise…",
+};
+
+function onbShell() {
+  let el = document.getElementById("onboarding");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "onboarding";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    el.style.cssText = "position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:24px";
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function onbCard(inner) {
+  onbShell().innerHTML = `<div style="width:min(640px,100%);max-height:88vh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:var(--shadow)">${inner}</div>`;
+}
+
+function closeOnboarding() {
+  document.getElementById("onboarding")?.remove();
+}
+
+async function openOnboarding() {
+  let data;
+  try { data = await api("/api/onboarding"); } catch { return; }
+  const phase = data.status.phase;
+  if (phase && phase !== "idle" && phase !== "done" && phase !== "error") return onbProgress();
+  const tools = data.tools;
+  const found = tools.filter((x) => x.found);
+  const rows = tools.map((x) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border-soft, var(--border));border-radius:8px;${x.found ? "" : "opacity:.55"}">
+      <input type="checkbox" class="onb-tool" value="${esc(x.tool)}" ${x.found ? "checked" : ""} ${x.found ? "" : "disabled"} />
+      <span style="flex:1">${esc(x.label)}</span>
+      <span class="muted" style="font-size:12px">${x.found ? esc(t("sessions found")) : esc(t("not installed"))}${x.integrated ? " · " + esc(t("connected")) : ""}</span>
+    </label>`).join("");
+  onbCard(`
+    <h3 style="margin:0 0 6px">${esc(t("Welcome to Memoria"))}</h3>
+    <p class="muted" style="margin:0 0 16px">${esc(found.length
+      ? t("Memoria found {0} AI tools on this machine. Pick the ones to connect: Memoria will read their past sessions and give every tool the same memory.", found.length)
+      : t("No AI tool sessions were found yet. Use Claude Code, Codex, Cursor, Gemini or another supported tool, then run setup again."))}</p>
+    <div style="display:grid;gap:6px;margin-bottom:16px">${rows}</div>
+    <p class="muted" style="font-size:12px;margin:0 0 16px">${esc(t("Everything stays on this computer. Secrets are redacted before anything is stored."))}</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" id="onbSkip">${esc(t("Skip"))}</button>
+      <button class="btn primary" id="onbStart" ${found.length ? "" : "disabled"}>${esc(t("Connect and import"))}</button>
+    </div>`);
+  document.getElementById("onbSkip").onclick = async () => {
+    try { await api("/api/onboarding/skip", { method: "POST" }); } catch {}
+    closeOnboarding();
+  };
+  document.getElementById("onbStart").onclick = async () => {
+    const picked = [...document.querySelectorAll(".onb-tool:checked")].map((c) => c.value);
+    if (!picked.length) return;
+    try {
+      await api("/api/onboarding/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tools: picked }) });
+      onbProgress();
+    } catch (e) {
+      toast(t("Failed: ") + e.message, "err");
+    }
+  };
+}
+
+async function onbProgress() {
+  let s;
+  try { s = (await api("/api/onboarding")).status; } catch { return; }
+  if (!document.getElementById("onboarding") && s.phase !== "connecting") onbShell();
+  if (s.phase === "done") return onbResult(s);
+  if (s.phase === "error") {
+    onbCard(`<h3 style="margin:0 0 8px">${esc(t("Setup stopped"))}</h3><p class="muted">${esc(s.error)}</p>
+      <div style="display:flex;justify-content:flex-end"><button class="btn" id="onbClose">${esc(t("Close"))}</button></div>`);
+    document.getElementById("onbClose").onclick = closeOnboarding;
+    return;
+  }
+  const secs = Math.max(0, Math.round((Date.now() - s.startedAt) / 1000));
+  onbCard(`
+    <h3 style="margin:0 0 6px">${esc(t("Setting up Memoria"))}</h3>
+    <p style="margin:0 0 14px">${esc(t(ONB_PHASES[s.phase] || "Working…"))}</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      ${[[t("Messages read"), s.transcripts], [t("Memories"), s.memories], [t("Still to process"), s.pending]]
+        .map(([k, v]) => `<div style="border:1px solid var(--border);border-radius:8px;padding:10px"><div class="muted" style="font-size:12px">${esc(k)}</div><b style="font-size:18px">${Number(v || 0).toLocaleString()}</b></div>`).join("")}
+    </div>
+    <p class="muted" style="font-size:12px;margin:0">${esc(t("{0}s elapsed. Large histories keep importing in the background after this.", secs))}</p>`);
+  setTimeout(onbProgress, 1500);
+}
+
+async function onbResult(s) {
+  let projects = [];
+  try { projects = (await api("/api/onboarding/summary")).projects; } catch {}
+  const secs = Math.round(((s.finishedAt || Date.now()) - s.startedAt) / 1000);
+  const blocks = projects.map((p) => `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(p.name)}</b><span class="muted" style="font-size:12px">${esc(t("{0} messages", p.transcripts.toLocaleString()))}</span></div>
+      <ul style="margin:8px 0 0 18px;padding:0;font-size:13px">${p.memories.slice(0, 5).map((m) => `<li style="margin:3px 0"><span class="muted">[${esc(kindName(m.kind))}]</span> ${esc(m.content.replace(/\s+/g, " ").slice(0, 160))}</li>`).join("")}</ul>
+    </div>`).join("");
+  const connected = s.connected.length ? t("Connected: {0}.", s.connected.join(", ")) + " " : "";
+  const failed = s.failed.length ? t("Could not connect: {0}.", s.failed.map((f) => f.tool).join(", ")) + " " : "";
+  onbCard(`
+    <h3 style="margin:0 0 6px">${esc(projects.length ? t("Here is what Memoria remembers") : t("Memoria is ready"))}</h3>
+    <p class="muted" style="margin:0 0 14px">${esc(connected + failed + t("Done in {0}s. Your next session in any connected tool starts with this context.", secs))}</p>
+    ${blocks || `<p class="muted">${esc(t("No memories yet — they appear as you work. Imports continue in the background."))}</p>`}
+    <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn primary" id="onbDone">${esc(t("Open dashboard"))}</button></div>`);
+  document.getElementById("onbDone").onclick = () => {
+    closeOnboarding();
+    loadStats();
+    loadProjects();
+  };
+}
+
+document.getElementById("btnRunSetup")?.addEventListener("click", openOnboarding);
+
 (async function init() {
   await loadProjects();
   await loadStats();
   setInterval(loadStats, 12000);
+  try {
+    const o = await api("/api/onboarding");
+    if (!o.status.done) openOnboarding();
+  } catch {
+    /* not signed in yet, or an older engine */
+  }
 })();

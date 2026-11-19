@@ -525,6 +525,22 @@ export function startHttpServer(): Promise<void> {
           groups.get(key)!.ids.push(r.id);
         }
         sendJson(res, 200, { groups: [...groups.values()].sort((a, b) => b.ids.length - a.ids.length), total: rows.length });
+      } else if (url.pathname === "/api/onboarding" && req.method === "GET") {
+        const { detectTools, onboardingStatus } = await import("./onboarding");
+        sendJson(res, 200, { status: onboardingStatus(), tools: detectTools() });
+      } else if (url.pathname === "/api/onboarding/start" && req.method === "POST") {
+        const body = await readBody(req);
+        const { startOnboarding, onboardingStatus } = await import("./onboarding");
+        const tools = (Array.isArray(body.tools) ? body.tools : []).map((t: unknown) => String(t)).slice(0, 20);
+        startOnboarding(tools);
+        sendJson(res, 200, { ok: true, status: onboardingStatus() });
+      } else if (url.pathname === "/api/onboarding/summary" && req.method === "GET") {
+        const { rememberedSummary } = await import("./onboarding");
+        sendJson(res, 200, { projects: rememberedSummary(3) });
+      } else if (url.pathname === "/api/onboarding/skip" && req.method === "POST") {
+        const { markOnboarded } = await import("./onboarding");
+        markOnboarded();
+        sendJson(res, 200, { ok: true });
       } else if (url.pathname === "/api/file-context" && req.method === "GET") {
         const { fileContext } = await import("./retrieve/filecontext");
         const p = url.searchParams.get("path") || "";

@@ -50,6 +50,14 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Onboarding
+- **First-run setup assistant** (`onboarding.ts`, dashboard): detects which AI tools have sessions on this machine, connects the selected ones (capture + MCP registration), imports past sessions in the background (newest first, Tier 0 offline, then auto-triage), and ends with "Here is what Memoria remembers" for the most recent projects. Shown once on installs without memories; Settings → Run setup again. API: `GET /api/onboarding`, `POST /api/onboarding/start`, `GET /api/onboarding/summary`, `POST /api/onboarding/skip`.
+
+### Fixed
+- Claude Code integration registered `node mcp` without the engine script path, so Claude Code could not start Memoria's MCP server.
+- Task lifecycle closed fresh tasks: a done-word anywhere in the session ("fixed" about another bug) marked every task whose keywords appeared anywhere as done. A task now closes only when one message part mentions most of its keywords and says it is finished, or checks its checkbox.
+- Engine label and settings text still said heuristics send results to a review queue.
+
 ### Capture
 - **Antigravity conversations are captured** (`ingest/antigravity-brain.ts`): `~/.gemini/antigravity*/brain/<id>/…/transcript_full.jsonl` (IDE, CLI, agent). Previously only IDE log files were read and the brain transcripts were picked up by the generic Gemini scanner as user-only rows with no project. User requests are unwrapped from `<USER_REQUEST>`, planner responses are assistant rows, tool steps are tool rows, SYSTEM steps are skipped, and the project is inferred from the first absolute path (nearest folder with `.git`/`package.json`). On one real machine: 45 conversations, 17,103 rows.
 - **Agent todo lists become tasks**: Claude Code `TodoWrite` and OpenCode `todowrite` are stored as `- [ ]` / `- [x]` checklists, which Tier 0 turns into task memories.

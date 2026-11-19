@@ -1280,7 +1280,7 @@
           <div class="settings-group" data-stab="engine">
 <div class="card">
               <h4 data-i18n="Intelligence engine">Intelligence engine</h4>
-              <div class="card-desc" data-i18n-html="Memory extraction &amp; embedding. <b>Auto</b> mode uses Ollama when it is running; with no model at all, Memoria still works (heuristics → review queue). Changes apply instantly, no restart.">Memory extraction &amp; embedding. <b>Auto</b> mode uses Ollama when it is running; with no model at all, Memoria still works (heuristics → review queue). Changes apply instantly, no restart.</div>
+              <div class="card-desc" data-i18n-html="Memory extraction &amp; embedding. <b>Auto</b> mode uses Ollama when it is running; with no model at all, Memoria still works (heuristics with automatic triage). Changes apply instantly, no restart.">Memory extraction &amp; embedding. <b>Auto</b> mode uses Ollama when it is running; with no model at all, Memoria still works (heuristics with automatic triage). Changes apply instantly, no restart.</div>
               <div style="margin-top:10px">
                 <label class="t-label" for="setExtractEngine" data-i18n="Extraction engine">Extraction engine</label>
                 <select id="setExtractEngine" style="width:100%; margin-top:4px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-size:12px; outline:none">
@@ -1378,6 +1378,11 @@
                 <label class="t-label" for="setCaptureExclude" data-i18n="Never capture these projects">Never capture these projects</label>
                 <div class="t-desc" data-i18n="One per line: a folder path (prefix, ~ allowed) or a project name. Applies to new captures; lines starting with # are ignored.">One per line: a folder path (prefix, ~ allowed) or a project name. Applies to new captures; lines starting with # are ignored.</div>
                 <textarea id="setCaptureExclude" rows="3" spellcheck="false" placeholder="~/work/client-secret&#10;banking-app" style="width:100%; margin-top:6px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none; resize:vertical"></textarea>
+              </div>
+              <div class="toggle-row">
+                <div><div class="t-label" data-i18n="Setup assistant">Setup assistant</div><div class="t-desc" data-i18n="Detect AI tools, connect them, and import past sessions again">Detect AI tools, connect them, and import past sessions again</div></div>
+                <div class="spacer"></div>
+                <button class="btn" id="btnRunSetup" data-i18n="Run setup again">Run setup again</button>
               </div>
               <div class="toggle-row" data-key="apiTokenRequired">
                 <div><div class="t-label" data-i18n="Require API token">Require API token</div><div class="t-desc" data-i18n="Other apps and OS users need the token to read your memories through the local API. Run `memoria token` to print it.">Other apps and OS users need the token to read your memories through the local API. Run `memoria token` to print it.</div></div>

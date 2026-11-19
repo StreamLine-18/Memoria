@@ -128,7 +128,7 @@ export const heuristicProvider: MemoryProvider = {
   id: "heuristic",
   embedModel: HASH_MODEL,
   describe() {
-    return "Heuristics (no model — results go to the review queue)";
+    return "Heuristics (no model — auto-triaged)";
   },
   async extract(_projectName, conversation) {
     const r: HeuristicMemory[] = heuristicExtract(conversation);

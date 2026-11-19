@@ -6,7 +6,6 @@ const DONE_WORDS = [
   "sudah saya", "sudah diperbaiki", "teratasi", "implemented", "merged", "shipped",
 ];
 
-const IN_PROGRESS_WORDS = ["sedang", "mulai", "akan", "progress", "in progress", "sedang proses", "lagi", "menangani", "working on", "implementing"];
 
 function hasAny(text: string, words: string[]): boolean {
   const lc = text.toLowerCase();
@@ -34,21 +33,38 @@ export function runTaskLifecycle(projectId: number): void {
     .all(projectId, since) as Array<{ role: string; content: string; ts: number }>;
   if (!rows.length) return;
 
-  const textLower = rows.map((r) => r.content).join("\n").toLowerCase();
-  const firstWorkIndex = rows.findIndex((r) => hasAny(r.content, IN_PROGRESS_WORDS) || r.role === "user");
-
   for (const mem of pending) {
-    const kws = keywordsOf(mem.content);
-    if (!kws.length) continue;
-    const matched = kws.some((k) => textLower.includes(k));
-    if (!matched) continue;
-    const idx = firstWorkIndex >= 0 ? firstWorkIndex : 0;
-    const after = rows.slice(idx).map((r) => r.content).join("\n");
-    if (hasAny(after, DONE_WORDS)) {
+    if (isTaskDone(mem.content, mem.createdAt, rows)) {
       updateMemory(mem.id!, { kind: "task_done" });
       markResolved(mem.id!);
     }
   }
+}
+
+/** A task is done only when ONE message part both talks about this task
+ * (most of its keywords) and says it is finished. Before, a done-word
+ * anywhere in the session ("fixed" about another bug) closed every task
+ * whose keywords appeared anywhere, so fresh TODOs showed up as Done. A
+ * checked checkbox for the same item counts; the task's own line does not. */
+export function isTaskDone(content: string, createdAt: number, rows: Array<{ role: string; content: string; ts: number }>): boolean {
+  const kws = keywordsOf(content);
+  if (!kws.length) return false;
+  const need = Math.min(kws.length, Math.max(2, Math.ceil(kws.length * 0.6)));
+  const own = content.replace(/^\s*(?:[-*]|\d+[.)])?\s*(?:\[[ xX]\]\s*)?(?:todo:?\s*)?/i, "").replace(/\s+/g, " ").trim().toLowerCase();
+  for (const r of rows) {
+    if (r.ts < createdAt) continue;
+    for (const part of r.content.split(/\n+/)) {
+      const lc = part.replace(/\s+/g, " ").toLowerCase();
+      if (!lc.trim()) continue;
+      const checked = /^\s*(?:[-*]|\d+[.)])?\s*\[[xX]\]/.test(part);
+      // The pending item itself (`- [ ] …`, `TODO: …`) is not evidence of completion.
+      if (!checked && (/^\s*(?:[-*]|\d+[.)])?\s*\[ \]/.test(part) || lc.includes(own))) continue;
+      const hits = kws.filter((k) => lc.includes(k)).length;
+      if (hits < need) continue;
+      if (checked || hasAny(lc, DONE_WORDS)) return true;
+    }
+  }
+  return false;
 }
 
 function keywordsOf(content: string): string[] {

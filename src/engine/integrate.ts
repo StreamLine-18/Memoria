@@ -41,8 +41,10 @@ function claudeTarget(): ToolTarget {
     display: "Claude Code",
     configPath: () => path.join(home(), ".claude.json"),
     configured: () => fs.existsSync(path.join(home(), ".claude.json")),
-    register: (cmd) => {
-      const r = spawnSync("claude", ["mcp", "add", "--scope", "user", "memoria", "--transport", "stdio", "--", cmd, "mcp"], {
+    register: (cmd, script) => {
+      // The engine script path was missing: Claude Code got `node mcp`, which
+      // cannot start Memoria's MCP server.
+      const r = spawnSync("claude", ["mcp", "add", "--scope", "user", "memoria", "--transport", "stdio", "--", cmd, script, "mcp"], {
         timeout: 20000,
         windowsHide: true,
         encoding: "utf8",
