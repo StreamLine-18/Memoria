@@ -50,6 +50,10 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Beyond coding tools
+- **Import ChatGPT and Claude history** (`import/chats.ts`): the `.zip` (or `conversations.json`) from ChatGPT or Claude data export. ChatGPT's conversation tree is followed from `current_node`, so regenerated branches and system prompts are skipped. Each conversation becomes a session (tools `chatgpt` / `claude-ai`) that Tier 0 extracts and triages like any other. Re-importing adds nothing. Dashboard: Settings → Backup & transfer; CLI: `memoria import <file>`; API: `POST /api/import/chats` (raw upload, up to 1 GB, streamed to a temp file). Dependency-free zip reader (`import/zip.ts`).
+- **Obsidian vault, two-way** (`export/obsidian.ts`): memories live as Markdown notes with a stable `memoria_id` in frontmatter, one folder per project. Edit a note in Obsidian → the memory is updated (body, `kind`, `importance`); delete a note → the memory is archived; write a new note → a new memory, with its id written back. Changes in Memoria rewrite the note. `.memoria-sync.json` tracks the last synced state; when both sides changed, the note wins and the conflict is counted. Syncs every 5 minutes once Settings → Obsidian vault is set, or `memoria obsidian sync <dir>`. Notes from the old one-way export are replaced instead of duplicated. Frontmatter keys are now English.
+
 ### Claude Code hooks
 - **Native Claude Code hooks** (`hooks/claude.ts`), installed when Claude Code is connected (Integrations, onboarding) or with `memoria hooks install` (`remove`, `status`):
   - `SessionStart` (sync, 10 s timeout): prints the project's resume context, which Claude Code adds to the new session — no waiting for the file watcher or an AGENTS.md refresh.

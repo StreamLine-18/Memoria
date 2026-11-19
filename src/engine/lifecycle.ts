@@ -57,6 +57,16 @@ async function runHousekeepingSoon(): Promise<void> {
     } catch {
       /* antrean dicoba lagi pada siklus berikutnya */
     }
+    try {
+      const { syncConfiguredVault } = await import("./export/obsidian");
+      const v = syncConfiguredVault();
+      if (v && (v.updatedFromNotes || v.createdFromNotes || v.archivedFromNotes)) {
+        console.log(`[memoria] Obsidian vault: ${v.updatedFromNotes} updated, ${v.createdFromNotes} new, ${v.archivedFromNotes} archived from notes`);
+        emitEvent("memory", { obsidian: true });
+      }
+    } catch {
+      /* vault unavailable (unplugged drive, permissions): retried next cycle */
+    }
     const { autoInjectContext } = await import("./handoff");
     try {
       const done = await autoInjectContext();

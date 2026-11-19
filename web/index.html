@@ -1506,6 +1506,22 @@
                     <button class="btn" id="btnImportMd" data-i18n="Import Markdown">Import Markdown</button>
                   </div>
                 </div>
+                <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border)">
+                  <div class="t-label" data-i18n="Import ChatGPT or Claude history">Import ChatGPT or Claude history</div>
+                  <div class="card-desc" data-i18n="Choose the .zip from ChatGPT (Settings → Data controls → Export) or Claude (Settings → Privacy → Export data). Conversations become memories like any other session. Re-importing is safe.">Choose the .zip from ChatGPT (Settings → Data controls → Export) or Claude (Settings → Privacy → Export data). Conversations become memories like any other session. Re-importing is safe.</div>
+                  <div style="display:flex; gap:8px; margin-top:8px; align-items:center">
+                    <input type="file" id="chatExportFile" accept=".zip,.json" style="flex:1; min-width:0; font-size:12px" />
+                    <button class="btn" id="btnImportChats" data-i18n="Import">Import</button>
+                  </div>
+                </div>
+                <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border)">
+                  <div class="t-label" data-i18n="Obsidian vault (two-way)">Obsidian vault (two-way)</div>
+                  <div class="card-desc" data-i18n="Memories are kept as Markdown notes in this folder. Edit a note in Obsidian and Memoria updates the memory; delete it to archive; write a new note to add a memory. Syncs every 5 minutes.">Memories are kept as Markdown notes in this folder. Edit a note in Obsidian and Memoria updates the memory; delete it to archive; write a new note to add a memory. Syncs every 5 minutes.</div>
+                  <div style="display:flex; gap:8px; margin-top:8px">
+                    <input type="text" id="setObsidianVault" placeholder="/path/to/vault/Memoria" style="flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-family:var(--mono); font-size:11.5px; outline:none" />
+                    <button class="btn" id="btnObsidianSync" data-i18n="Sync now">Sync now</button>
+                  </div>
+                </div>
               </div>
             </div>
             

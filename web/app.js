@@ -1517,6 +1517,7 @@ async function loadSettingsToggles() {
     };
     setVal("setNotifyTelegramChat", s.notifyTelegramChat);
     setVal("setCaptureExclude", s.captureExclude);
+    setVal("setObsidianVault", s.obsidianVault);
     setVal("setNotifyDraftMin", s.notifyDraftMin);
     const mark = (hasKey, stId) => {
       const st = document.getElementById(stId);
@@ -2133,6 +2134,41 @@ $("#btnImportMd").addEventListener("click", async () => {
     toast(t("Import failed: ") + e.message, "err");
   } finally {
     btn.disabled = false;
+  }
+});
+
+// Chat export upload: raw bytes (exports are often larger than a JSON body).
+document.getElementById("btnImportChats")?.addEventListener("click", async () => {
+  const input = document.getElementById("chatExportFile");
+  const file = input && input.files && input.files[0];
+  if (!file) { toast(t("Choose an export file first"), "err"); return; }
+  const btn = document.getElementById("btnImportChats");
+  btn.disabled = true;
+  btn.textContent = t("Importing…");
+  try {
+    const r = await api("/api/import/chats", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    toast(t("Imported {0} conversations ({1} messages) from {2}", r.conversations, r.messages, r.source === "chatgpt" ? "ChatGPT" : "Claude"));
+    input.value = "";
+    loadStats();
+    loadProjects();
+  } catch (e) {
+    toast(t("Import failed: ") + e.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t("Import");
+  }
+});
+
+document.getElementById("btnObsidianSync")?.addEventListener("click", async () => {
+  const dir = document.getElementById("setObsidianVault").value.trim();
+  if (!dir) { toast(t("Folder path is empty"), "err"); return; }
+  try {
+    const r = await api("/api/obsidian/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dir }) });
+    if (!r.ok) throw new Error(r.error || "sync failed");
+    toast(t("Vault synced: {0} notes, {1} updated from Obsidian, {2} new, {3} archived", r.notes, r.updatedFromNotes, r.createdFromNotes, r.archivedFromNotes));
+    loadStats();
+  } catch (e) {
+    toast(t("Failed: ") + e.message, "err");
   }
 });
 

@@ -221,6 +221,10 @@ subject, the old one is marked superseded and drops out of the resume block.
 starts with the project's resume context, and each turn, compaction, and session end is
 imported immediately (`memoria hooks install | remove | status`).
 
+**Beyond coding tools:** import your ChatGPT or Claude history (the data-export `.zip`) and
+keep memories in an Obsidian vault in both directions — edit or delete a note there and
+Memoria follows.
+
 ### 4 · CLI
 
 ```bash
