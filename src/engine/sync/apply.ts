@@ -53,6 +53,9 @@ interface MemoryPayload {
   origin: string;
   archived: number;
   tags: string[];
+  /** M5: uid of the newer decision that replaced this one (null = current). */
+  supersededByUid: string | null;
+  validTo: number;
 }
 
 interface LinkPayload {
@@ -136,6 +139,8 @@ function validateMemory(value: unknown): MemoryPayload {
     origin,
     archived: p.archived === 1 || p.archived === true ? 1 : 0,
     tags,
+    supersededByUid: typeof p.supersededByUid === "string" && p.supersededByUid ? p.supersededByUid.slice(0, 200) : null,
+    validTo: number(p.validTo, 0),
   };
 }
 
@@ -176,6 +181,23 @@ function normalizeOp(raw: BundleOp): BundleOp {
 
 /** Terapkan bundle yang sudah didekripsi. Semua perubahan dalam satu transaksi:
  * file rusak/konflik fatal tidak boleh meninggalkan state setengah jadi. */
+/** Map the replacing decision by uid. Memories in one bundle are applied in
+ * first-seen order, so the newer decision may arrive later in the same
+ * bundle: unresolved links are retried after all memories are applied. */
+let pendingSupersession: Array<{ memoryId: number; p: MemoryPayload }> | null = null;
+function applySupersession(memoryId: number, p: MemoryPayload): void {
+  const d = getDb();
+  let by = 0;
+  if (p.supersededByUid) {
+    const row = d.prepare("SELECT id FROM memories WHERE uid = ?").get(p.supersededByUid) as { id: number } | undefined;
+    by = row ? row.id : 0;
+    if (!by && pendingSupersession) pendingSupersession.push({ memoryId, p });
+  }
+  // valid_to is closed by supersession or archiving; otherwise open.
+  const validTo = by || p.archived ? p.validTo : 0;
+  d.prepare("UPDATE memories SET superseded_by = ?, valid_to = ? WHERE id = ?").run(by, validTo, memoryId);
+}
+
 export function applySyncBundle(bundle: SyncBundle): ApplyResult {
   const d = getDb();
   const header = bundle.header;
@@ -408,10 +430,12 @@ export function applySyncBundle(bundle: SyncBundle): ApplyResult {
       for (const tag of payload.tags) tagStmt.run(memoryId, tag);
       reindexEntities(memoryId, payload.content);
       queueEmbeddingBackfill(memoryId);
+      applySupersession(memoryId, payload);
       recordEntityClock("memory", uid, op.hlc, "upsert");
       return true;
     }
 
+    applySupersession(local.id, payload);
     const contentChanged = local.content !== payload.content;
     d.prepare(
       `UPDATE memories SET project_id = ?, kind = ?, content = ?, importance = ?, created_at = ?, source_tool = ?,
@@ -521,10 +545,14 @@ export function applySyncBundle(bundle: SyncBundle): ApplyResult {
       if (applyProject(op)) applied++;
       else skipped++;
     }
+    pendingSupersession = [];
     for (const op of groups.memory) {
       if (applyMemory(op)) applied++;
       else skipped++;
     }
+    const retry = pendingSupersession;
+    pendingSupersession = null;
+    for (const r of retry) applySupersession(r.memoryId, r.p);
     for (const op of groups.link) {
       if (applyLink(op)) applied++;
       else skipped++;

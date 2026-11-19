@@ -14,7 +14,7 @@
  *   - token overlap is in the "same topic, different content" band: high
  *     enough to be about the same thing, below the dedupe merge level
  * ------------------------------------------------------------------------- */
-import { getDb, bumpDataVersion, getDeviceId, memoryById } from "../store/db";
+import { getDb, bumpDataVersion, getDeviceId, memoryById, enqueueMemorySync } from "../store/db";
 import { extractEntities } from "./entities";
 import { textSimilarity } from "./dedupe";
 
@@ -54,6 +54,7 @@ export function supersedeOlderDecisions(newId: number): number[] {
     const sim = textSimilarity(m.content, o.content);
     if (sim < SUPERSEDE_MIN_SIM || sim >= SUPERSEDE_MAX_SIM) continue;
     upd.run(newId, now, now, getDeviceId(), o.id);
+    enqueueMemorySync(o.id);
     out.push(o.id);
   }
   if (out.length) bumpDataVersion();
@@ -66,5 +67,6 @@ export function restoreDecision(id: number): boolean {
     .prepare("UPDATE memories SET superseded_by = 0, valid_to = 0, updated_at = ?, updated_by = ? WHERE id = ? AND COALESCE(superseded_by, 0) != 0")
     .run(Date.now(), getDeviceId(), id);
   bumpDataVersion();
+  if (res.changes > 0) enqueueMemorySync(id);
   return res.changes > 0;
 }

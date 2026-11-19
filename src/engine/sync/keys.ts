@@ -1,4 +1,5 @@
 import * as os from "node:os";
+import { createHash } from "node:crypto";
 import { getDb, getDeviceId, getSetting, getSyncState, setSetting } from "../store/db";
 import { decryptSecret, encryptSecret, encryptionAvailable } from "../store/secure";
 import {
@@ -13,6 +14,9 @@ import {
 
 const KEY_SETTING = "sync.groupKey";
 const DEVICE_NAME_SETTING = "sync.deviceName";
+const PREVIOUS_GROUPS = "sync.previousGroups";
+const REVOKED_DEVICES = "sync.revokedDevices";
+const unlockedCache = new Map<string, Buffer>();
 
 export interface UnlockOptions {
   passphrase?: string;
@@ -72,7 +76,15 @@ export function loadGroupKey(opts: UnlockOptions = {}): Buffer {
     if (!passphrase) {
       throw new Error("Sync key is locked; pass --passphrase or set MEMORIA_SYNC_PASSPHRASE");
     }
-    return unwrapKeyWithPassphrase(stored, passphrase);
+    // scrypt (N=32768) blocks the event loop for ~100 ms: unwrap once per
+    // stored key + passphrase and keep the result in memory for this process.
+    const cacheKey = createHash("sha256").update(stored).update("\0").update(passphrase).digest("hex");
+    const hit = unlockedCache.get(cacheKey);
+    if (hit) return Buffer.from(hit);
+    const key = unwrapKeyWithPassphrase(stored, passphrase);
+    unlockedCache.clear();
+    unlockedCache.set(cacheKey, Buffer.from(key));
+    return key;
   }
   if (stored.startsWith("kc1:")) {
     // CLI/headless: AES-GCM with the OS-keychain master key (store/secretkey.ts).
@@ -107,6 +119,19 @@ export function setupSync(opts: SetupOptions = {}): SetupResult {
   }
   const joined = !!opts.joinCode;
   const key = opts.joinCode ? decodeRecoveryCode(opts.joinCode) : generateGroupKey();
+  // Re-joining after a rotation: remember the old group so its leftover
+  // bundles in the shared folder are skipped instead of reported as errors.
+  if (isSyncConfigured()) {
+    try {
+      const oldId = groupIdFor(loadGroupKey(opts));
+      if (oldId !== groupIdFor(key)) {
+        setSetting(PREVIOUS_GROUPS, JSON.stringify([oldId, ...previousGroupIds().filter((g) => g !== oldId)].slice(0, 20)));
+      }
+    } catch {
+      /* old key locked or corrupt: nothing to remember */
+    }
+  }
+  unlockedCache.clear();
   const passphrase = opts.passphrase || process.env.MEMORIA_SYNC_PASSPHRASE || "";
   if (passphrase) {
     setSetting(KEY_SETTING, wrapKeyWithPassphrase(key, passphrase));
@@ -123,6 +148,101 @@ export function setupSync(opts: SetupOptions = {}): SetupResult {
     recoveryCode: joined ? null : encodeRecoveryCode(key),
     joined,
   };
+}
+
+/* ---------- M5: key rotation and device revocation ----------
+ * Bundles are encrypted with the group key, so a device that has the key can
+ * read everything written with it. Revoking a device = rotating the key: new
+ * bundles use a new key the revoked device never sees. Bundles from the old
+ * group (or from a revoked device id) are skipped before decryption. Other
+ * devices keep working after they join the new group with the new code. */
+
+function readList(key: string): string[] {
+  try {
+    const v = JSON.parse(getSetting(key, "[]"));
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function previousGroupIds(): string[] {
+  return readList(PREVIOUS_GROUPS);
+}
+
+export function revokedDevices(): string[] {
+  return readList(REVOKED_DEVICES);
+}
+
+export interface RotateResult {
+  groupId: string;
+  previousGroupId: string;
+  recoveryCode: string;
+}
+
+/** Replace the group key with a new random key, stored the same way. */
+export function rotateGroupKey(opts: UnlockOptions = {}): RotateResult {
+  if (process.env.MEMORIA_SYNC_KEY) throw new Error("The group key comes from MEMORIA_SYNC_KEY; change that variable instead");
+  const storage = keyStorage();
+  if (storage === "none") throw new Error("Sync is not configured. Run: memoria sync setup");
+  const oldKey = loadGroupKey(opts); // also proves the passphrase
+  const previousGroupId = groupIdFor(oldKey);
+  const key = generateGroupKey();
+  if (storage === "passphrase") {
+    const passphrase = opts.passphrase || process.env.MEMORIA_SYNC_PASSPHRASE || "";
+    setSetting(KEY_SETTING, wrapKeyWithPassphrase(key, passphrase));
+  } else {
+    const encrypted = encryptSecret(key.toString("base64"));
+    if (!encrypted) throw new Error("No OS keychain is available; re-run with --passphrase");
+    setSetting(KEY_SETTING, encrypted);
+  }
+  unlockedCache.clear();
+  const prev = previousGroupIds().filter((g) => g !== previousGroupId);
+  setSetting(PREVIOUS_GROUPS, JSON.stringify([previousGroupId, ...prev].slice(0, 20)));
+  return { groupId: groupIdFor(key), previousGroupId, recoveryCode: encodeRecoveryCode(key) };
+}
+
+/** Mark a device as revoked (by full id or unique prefix) and rotate the key. */
+export function revokeDevice(idOrPrefix: string, opts: UnlockOptions = {}): RotateResult & { deviceId: string } {
+  const q = String(idOrPrefix || "").trim();
+  if (!q) throw new Error("Usage: sync revoke <device-id>");
+  if (getDeviceId().startsWith(q)) throw new Error("That is this device; run sync rotate on another device instead");
+  const matches = listDevices().filter((d) => d.deviceId.startsWith(q));
+  if (matches.length > 1) throw new Error(`Device id prefix "${q}" is ambiguous`);
+  const deviceId = matches[0]?.deviceId || q;
+  setSetting(REVOKED_DEVICES, JSON.stringify([...new Set([...revokedDevices(), deviceId])]));
+  return { ...rotateGroupKey(opts), deviceId };
+}
+
+export interface DeviceInfo {
+  deviceId: string;
+  name: string;
+  self: boolean;
+  revoked: boolean;
+  lastBundleAt: number;
+  bundles: number;
+}
+
+/** This device plus every device whose bundles were applied here. */
+export function listDevices(): DeviceInfo[] {
+  const d = getDb();
+  const revoked = new Set(revokedDevices());
+  const self = getDeviceId();
+  const out = new Map<string, DeviceInfo>();
+  out.set(self, { deviceId: self, name: getDeviceName(), self: true, revoked: false, lastBundleAt: 0, bundles: 0 });
+  try {
+    const rows = d
+      .prepare("SELECT device_id AS id, COUNT(*) AS n, MAX(applied_at) AS last FROM sync_applied_bundle GROUP BY device_id")
+      .all() as Array<{ id: string; n: number; last: number }>;
+    for (const r of rows) {
+      if (!r.id || r.id === self) continue;
+      out.set(r.id, { deviceId: r.id, name: "", self: false, revoked: revoked.has(r.id), lastBundleAt: Number(r.last) || 0, bundles: Number(r.n) || 0 });
+    }
+  } catch {
+    /* ledger missing on very old databases */
+  }
+  for (const id of revoked) if (!out.has(id)) out.set(id, { deviceId: id, name: "", self: false, revoked: true, lastBundleAt: 0, bundles: 0 });
+  return [...out.values()];
 }
 
 export interface SyncStatus {

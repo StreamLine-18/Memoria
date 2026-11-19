@@ -1,6 +1,6 @@
 # Memoria Encrypted Sync — Design
 
-Status: M1 implemented on `main` (PR #8; schema, UID, HLC, outbox, tests). M2 implemented (migration v4, group key/recovery code, encrypted manual `.memsync` bundles, CLI export/import, idempotent apply, embedding backfill queue). M3 implemented (migration v5 applied-bundle ledger, shared-folder config/status, atomic debounced export, watcher-driven scan/apply with per-file error tolerance, `sync folder`/`sync conflicts` CLI, cleanup of own old bundles, two-device integration tests). M4 implemented (Settings Sync tab status/folder/conflicts UI, localhost sync status/conflicts/folder API, README/i18n). M5 hardening not implemented. Scope: F3 sync between Memoria instances (same user, multiple machines).
+Status: M1 implemented on `main` (PR #8; schema, UID, HLC, outbox, tests). M2 implemented (migration v4, group key/recovery code, encrypted manual `.memsync` bundles, CLI export/import, idempotent apply, embedding backfill queue). M3 implemented (migration v5 applied-bundle ledger, shared-folder config/status, atomic debounced export, watcher-driven scan/apply with per-file error tolerance, `sync folder`/`sync conflicts` CLI, cleanup of own old bundles, two-device integration tests). M4 implemented (Settings Sync tab status/folder/conflicts UI, localhost sync status/conflicts/folder API, README/i18n). M5 implemented (key rotation, device revocation, old-key/revoked bundle skipping, future-clock guard, passphrase unlock cache, superseded decisions in the memory payload). Scope: F3 sync between Memoria instances (same user, multiple machines).
 
 ## 1. Goals and non-goals
 
@@ -253,12 +253,12 @@ CLI: `memoria sync status|export|import|folder`.
    idempotent apply, embedding backfill queue.
 3. **M3 — folder sync**: watcher, applied ledger, conflict log, two-device integration tests.
 4. **M4 — UX and docs**: Settings → Sync, status/conflict UI, README/i18n.
-5. **M5 — hardening**: key rotation, device revocation, rollback protection, performance pass.
+5. **M5 — hardening** (implemented): `sync rotate` replaces the group key and republishes a full export; `sync revoke <device>` records the device as revoked and rotates; bundles whose header names a previous group or a revoked device are skipped before decryption (not reported as errors); bundles or ops with an HLC more than 24 h in the future are refused, so a wrong or hostile clock cannot win every LWW conflict or push other clocks forward; the passphrase-unwrapped key is cached per process (scrypt once instead of on every folder scan); `sync devices` lists this device and every device whose bundles were applied. Rollback of an older bundle is already covered by the applied-bundle ledger and per-entity LWW clocks.
 6. **Optional** — direct LAN pairing.
 
 ## 15. Decisions for v1
 
 Resolved: manual bundles plus shared folder, transcripts excluded, generated recovery code
 plus optional passphrase, LWW with bounded conflict log, and 180-day tombstone retention.
-Still open: device revocation (manual group-key rotation vs automatic re-key through a
-paired-device channel).
+Device revocation: manual group-key rotation (M5). Automatic re-key through a paired-device
+channel remains possible later; today the kept devices re-join with the new recovery code.
