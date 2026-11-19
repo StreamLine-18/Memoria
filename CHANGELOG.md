@@ -50,6 +50,10 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Docs
+- Hindi README (`README.hi.md`), contributed by @bhavana4123 (#72).
+- CI checks that every README status badge and `server.json` match the `package.json` version (`npm run check:versions`).
+
 ## [0.16.1] — 2026-11-19 — Clear Tools
 
 **Every MCP tool parameter is described in English.**
