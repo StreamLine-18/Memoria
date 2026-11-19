@@ -1,0 +1,58 @@
+# Landing page (site/) → GitHub Pages. Separate from build.yml: app releases
+# are unaffected. Off until the repo variable SITE_ENABLED is "true" and Pages
+# is set to "GitHub Actions" in Settings → Pages. Contract: site/README.md.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/site-assets.mjs", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: vars.SITE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Base path
+        run: |
+          if [ -f site/CNAME ] || [ -f site/public/CNAME ]; then base=/; else base="/${GITHUB_REPOSITORY#*/}/"; fi
+          echo "SITE_BASE=${base}" >> "$GITHUB_ENV"
+          echo "SITE_BASE=${base}"
+      - name: Build
+        run: |
+          if [ -f site/package.json ]; then
+            cd site
+            if [ -f package-lock.json ]; then npm ci; else npm install; fi
+            npm run build
+            cd ..
+            echo "SITE_OUT=site/dist" >> "$GITHUB_ENV"
+          else
+            mkdir -p _site
+            cp -R site/. _site/
+            rm -f _site/README.md
+            echo "SITE_OUT=_site" >> "$GITHUB_ENV"
+          fi
+      - name: Shared assets
+        run: node scripts/site-assets.mjs "$SITE_OUT"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.SITE_OUT }}
+      - id: deployment
+        uses: actions/deploy-pages@v4

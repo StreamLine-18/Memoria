@@ -51,6 +51,7 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 ## [Unreleased]
 
 ### Docs
+- `site/` scaffold for the landing page: brief, brand tokens, shared-asset script and a stack-agnostic GitHub Pages workflow (off until enabled).
 - Hindi README (`README.hi.md`), contributed by @bhavana4123 (#72).
 - CI checks that every README status badge and `server.json` match the `package.json` version (`npm run check:versions`).
 

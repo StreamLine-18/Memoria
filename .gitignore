@@ -35,3 +35,8 @@ desktop.ini
 *.log
 # ZCode artefak sesi (plan, dll.)
 .zcode/
+
+# Landing page: shared assets are copied in by scripts/site-assets.mjs
+site/**/shared/
+site/dist/
+site/node_modules/
