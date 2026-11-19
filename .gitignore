@@ -40,3 +40,6 @@ desktop.ini
 site/**/shared/
 site/dist/
 site/node_modules/
+
+# Personal Note
+g.md
