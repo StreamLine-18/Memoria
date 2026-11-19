@@ -50,6 +50,13 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Sync M5 (hardening)
+- `memoria sync rotate` replaces the group key (same storage: keychain or passphrase) and republishes a full export to the shared folder. `memoria sync revoke <device-id-prefix>` marks a device as revoked and rotates. `memoria sync devices` lists devices with their last bundle. Kept devices re-join with `sync setup --join <new code> --force`.
+- Bundles written with a previous group key or by a revoked device are skipped before decryption instead of being reported as folder errors; re-joining records the old group so its leftovers are skipped too.
+- Bundles or operations dated more than 24 hours in the future are refused (a wrong or hostile clock could otherwise win every last-writer-wins conflict and push every device's clock forward).
+- The passphrase-unwrapped key is cached per process: scrypt runs once instead of on every folder scan.
+- Superseded decisions sync: the memory payload carries `supersededByUid` and `validTo`; links whose newer decision arrives later in the same bundle are resolved after all memories are applied.
+
 ### Capture
 - **VS Code (Copilot Chat) and Cursor are captured by default.** New parser `ingest/vscode-chat.ts`: VS Code `workspaceStorage/<hash>/chatSessions/*.jsonl` operation logs are replayed the way VS Code does (initial / set / push / delete entries; edited requests truncate), legacy `.json` sessions are read, thinking parts are skipped, and tool invocations become tool rows. Cursor Composer conversations are read from `globalStorage/state.vscdb` (`cursorDiskKV`, inline `conversation` or `bubbleId:` entries). The project comes from each workspace's `workspace.json`. The generic ItemTable scan stays as a fallback.
 

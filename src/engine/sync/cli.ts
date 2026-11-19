@@ -2,9 +2,9 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { applyBundleFile } from "./apply";
 import { exportBundle } from "./export";
-import { loadGroupKey, setupSync, syncStatus } from "./keys";
+import { listDevices, loadGroupKey, revokeDevice, rotateGroupKey, setupSync, syncStatus } from "./keys";
 import { embeddingBackfillCount, processEmbeddingBackfill } from "./embed";
-import { getFolderStatus, listRecentConflicts, scanAndApplyFolder, setSharedFolder } from "./folder";
+import { exportPendingToFolder, getFolderStatus, listRecentConflicts, scanAndApplyFolder, setSharedFolder } from "./folder";
 
 const VALUE_FLAGS = new Set(["passphrase", "out", "in", "device-name", "join", "limit"]);
 
@@ -189,5 +189,38 @@ export async function runSyncCommand(args: string[]): Promise<void> {
     return;
   }
 
-  throw new Error(`Unknown sync command: ${cmd}. Use setup, status, export, import, folder, or conflicts.`);
+  if (cmd === "devices") {
+    for (const dev of listDevices()) {
+      const tags = [dev.self ? "this device" : "", dev.revoked ? "REVOKED" : ""].filter(Boolean).join(", ");
+      const last = dev.lastBundleAt ? `last bundle ${formatAt(String(dev.lastBundleAt))}` : "";
+      console.log(`${dev.deviceId}  ${dev.name || ""}${tags ? ` [${tags}]` : ""}${last ? `  ${last} (${dev.bundles})` : ""}`);
+    }
+    return;
+  }
+
+  if (cmd === "rotate" || cmd === "revoke") {
+    const passphrase = flag(parsed, "passphrase");
+    let r: ReturnType<typeof rotateGroupKey>;
+    if (cmd === "revoke") {
+      const rv = revokeDevice(parsed.positional[1] || "", { passphrase });
+      console.log(`Revoked device: ${rv.deviceId}`);
+      r = rv;
+    } else {
+      r = rotateGroupKey({ passphrase });
+    }
+    console.log(`New group ID : ${r.groupId} (was ${r.previousGroupId})`);
+    console.log(`Recovery     : ${r.recoveryCode}`);
+    console.log("On every device you keep, run: memoria sync setup --join <recovery> --force");
+    // Republish everything under the new key so rejoined devices catch up.
+    const st = getFolderStatus();
+    if (st.path && st.available) {
+      const res = exportPendingToFolder({ passphrase, force: true, full: true });
+      if (res.exported) console.log(`Full export  : ${res.filePath} (${res.opCount} ops)`);
+    } else {
+      console.log("No shared folder: run `memoria sync export --full` and import it on the other devices.");
+    }
+    return;
+  }
+
+  throw new Error(`Unknown sync command: ${cmd}. Use setup, status, export, import, folder, conflicts, devices, rotate, or revoke.`);
 }

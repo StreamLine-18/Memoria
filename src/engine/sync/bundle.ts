@@ -7,6 +7,7 @@ import {
   decompressPayload,
   groupIdFor,
   packBundle,
+  peekBundleHeader,
   unpackBundle,
   type BundleHeader,
 } from "./crypto";
@@ -114,13 +115,45 @@ export function writeBundleFile(filePath: string, ops: BundleOp[], groupKey: Buf
   return { filePath: resolved, fileId, bytes: file.length };
 }
 
+/** A bundle that is skipped on purpose (old group key, revoked device). */
+export class SkippedBundleError extends Error {
+  constructor(public reason: "old-key" | "revoked-device", message: string) {
+    super(message);
+  }
+}
+
+/** HLCs are "<13-digit wall ms>.<counter>.<device>". A bundle claiming a
+ * clock far in the future would push every device's clock forward forever
+ * (and win every last-writer-wins conflict), so it is refused. */
+const MAX_CLOCK_SKEW_MS = 24 * 60 * 60_000;
+export function hlcWallMs(hlc: string): number {
+  return Number(String(hlc || "").split(".")[0]) || 0;
+}
+
 export function readBundleFile(filePath: string, groupKey: Buffer): SyncBundle {
   const stat = fs.statSync(filePath);
   if (stat.size > MAX_FILE_BYTES) throw new Error("Bundle file is too large");
   const file = fs.readFileSync(filePath);
+  // M5: decide before decrypting. Lazy require: keys.ts imports this module's deps.
+  const peek = peekBundleHeader(file);
+  if (peek) {
+    const { previousGroupIds, revokedDevices } = require("./keys") as typeof import("./keys");
+    if (peek.groupId && peek.groupId !== groupIdFor(groupKey) && previousGroupIds().includes(peek.groupId)) {
+      throw new SkippedBundleError("old-key", "written with a previous group key (before rotation)");
+    }
+    if (peek.deviceId && revokedDevices().includes(peek.deviceId)) {
+      throw new SkippedBundleError("revoked-device", `from revoked device ${peek.deviceId.slice(0, 8)}`);
+    }
+  }
   const { header, payload } = unpackBundle(file, groupKey);
   if (header.groupId !== groupIdFor(groupKey)) throw new Error("Bundle belongs to a different sync group");
+  if (hlcWallMs(header.hlcMax) > Date.now() + MAX_CLOCK_SKEW_MS) {
+    throw new Error("Bundle clock is more than 24 hours in the future; check the sending device's date and time");
+  }
   const ops = parseOps(decompressPayload(payload));
   if (ops.length !== header.opCount) throw new Error("Bundle operation count does not match its header");
+  for (const op of ops) {
+    if (hlcWallMs(op.hlc) > Date.now() + MAX_CLOCK_SKEW_MS) throw new Error("Bundle contains an operation dated more than 24 hours in the future");
+  }
   return { header, ops };
 }

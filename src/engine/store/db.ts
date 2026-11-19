@@ -1011,13 +1011,21 @@ function enqueueProjectSnapshot(id: number): void {
 }
 
 export function memorySyncPayload(id: number): { uid: string; payload: Record<string, unknown> } | null {
-  const row = getDb()
-    .prepare(
-      `SELECT m.uid, m.kind, m.content, m.importance, m.created_at, m.updated_at, m.updated_by, m.source_tool,
-              m.status, m.resolved_at, m.origin, m.archived, p.uid AS project_uid
-       FROM memories m LEFT JOIN projects p ON p.id = m.project_id WHERE m.id = ?`
-    )
-    .get(id) as
+  const base = `SELECT m.uid, m.kind, m.content, m.importance, m.created_at, m.updated_at, m.updated_by, m.source_tool,
+              m.status, m.resolved_at, m.origin, m.archived, p.uid AS project_uid`;
+  let stmt;
+  try {
+    stmt = getDb().prepare(
+      `${base}, COALESCE(m.valid_to, 0) AS valid_to, s.uid AS superseded_by_uid
+       FROM memories m LEFT JOIN projects p ON p.id = m.project_id
+       LEFT JOIN memories s ON s.id = m.superseded_by AND COALESCE(m.superseded_by, 0) != 0
+       WHERE m.id = ?`
+    );
+  } catch {
+    // During older migrations (v3 snapshots) valid_to / superseded_by do not exist yet.
+    stmt = getDb().prepare(`${base}, 0 AS valid_to, NULL AS superseded_by_uid FROM memories m LEFT JOIN projects p ON p.id = m.project_id WHERE m.id = ?`);
+  }
+  const row = stmt.get(id) as
     | {
         uid: string | null;
         kind: string;
@@ -1032,6 +1040,8 @@ export function memorySyncPayload(id: number): { uid: string; payload: Record<st
         origin: string | null;
         archived: number | null;
         project_uid: string | null;
+        valid_to: number | null;
+        superseded_by_uid: string | null;
       }
     | undefined;
   if (!row?.uid) return null;
@@ -1051,8 +1061,16 @@ export function memorySyncPayload(id: number): { uid: string; payload: Record<st
       origin: row.origin || "user",
       archived: row.archived ? 1 : 0,
       tags: tagsForMemory(id),
+      // M5: superseded decisions travel with the memory (uid, not local id).
+      supersededByUid: row.superseded_by_uid || null,
+      validTo: row.valid_to || 0,
     },
   };
+}
+
+/** Queue a sync snapshot after a change made with direct SQL. */
+export function enqueueMemorySync(id: number): void {
+  enqueueMemorySnapshot(id);
 }
 
 function enqueueMemorySnapshot(id: number): void {

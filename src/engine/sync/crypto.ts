@@ -186,6 +186,20 @@ export function packBundle(headerInput: BundleHeaderInput, payload: Buffer, grou
   return Buffer.concat([BUNDLE_MAGIC, length, rawHeader, ciphertext, tag]);
 }
 
+/** Read the (unencrypted, authenticated-later) header without decrypting, so
+ * bundles from another group or a revoked device can be skipped cheaply. */
+export function peekBundleHeader(file: Buffer): Partial<BundleHeader> | null {
+  try {
+    if (file.length < BUNDLE_MAGIC.length + 4 || !file.subarray(0, BUNDLE_MAGIC.length).equals(BUNDLE_MAGIC)) return null;
+    const len = file.readUInt32BE(BUNDLE_MAGIC.length);
+    if (len < 2 || len > MAX_HEADER_BYTES) return null;
+    const start = BUNDLE_MAGIC.length + 4;
+    return JSON.parse(file.subarray(start, start + len).toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 export function unpackBundle(file: Buffer, groupKey: Buffer): { header: BundleHeader; payload: Buffer } {
   if (file.length < BUNDLE_MAGIC.length + 4 + GCM_TAG_BYTES) throw new Error("Not a .memsync bundle (truncated)");
   if (!file.subarray(0, BUNDLE_MAGIC.length).equals(BUNDLE_MAGIC)) throw new Error("Not a .memsync bundle (bad magic)");

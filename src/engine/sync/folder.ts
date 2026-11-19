@@ -12,6 +12,7 @@ import {
 } from "../store/db";
 import { exportBundle } from "./export";
 import { applyBundleFile } from "./apply";
+import { SkippedBundleError } from "./bundle";
 import { embeddingBackfillCount, processEmbeddingBackfill } from "./embed";
 import { isSyncConfigured, loadGroupKey, syncStatus } from "./keys";
 
@@ -133,7 +134,7 @@ function pendingForFolder(): number {
   return Number(row.c);
 }
 
-export function exportPendingToFolder(opts: { passphrase?: string; force?: boolean } = {}): { exported: boolean; filePath?: string; opCount?: number } {
+export function exportPendingToFolder(opts: { passphrase?: string; force?: boolean; full?: boolean } = {}): { exported: boolean; filePath?: string; opCount?: number } {
   const p = folderPath();
   if (!p || getSyncState("sync.folder.enabled") !== "1") return { exported: false };
   if (!isWritableDir(p)) {
@@ -146,7 +147,7 @@ export function exportPendingToFolder(opts: { passphrase?: string; force?: boole
   const safeDev = sanitizeSegment(deviceId.slice(0, 8));
   const stamp = Date.now().toString(36);
   const out = path.join(p, `${safeDev}-${stamp}.memsync`);
-  const result = exportBundle({ filePath: out, groupKey, full: false });
+  const result = exportBundle({ filePath: out, groupKey, full: !!opts.full });
   setSyncState("sync.folder.lastExportHlc", result.hlcMax);
   setSyncState("sync.folder.lastExportAt", String(Date.now()));
   setSyncState("sync.folder.lastExportFile", result.filePath);
@@ -202,6 +203,12 @@ export async function scanAndApplyFolder(opts: { passphrase?: string; embed?: bo
       if (result.alreadyApplied) res.skipped++;
       else res.applied++;
     } catch (err) {
+      // M5: bundles from before a key rotation or from a revoked device are
+      // expected leftovers in a shared folder, not errors.
+      if (err instanceof SkippedBundleError) {
+        res.skipped++;
+        continue;
+      }
       const msg = `${path.basename(file)}: ${(err as Error).message}`;
       res.failed++;
       res.errors.push(msg);
