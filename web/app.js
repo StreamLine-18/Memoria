@@ -1874,8 +1874,26 @@ async function renderProjectDetail(slug) {
               <button class="btn" id="pdGoGraph">${t("Graph")}</button>
             </div>
           </div>
+          ${d.project.path ? `<div class="card" style="margin-top:16px">
+            <h4>${t("Project brain for your team")}</h4>
+            <div class="card-desc">${esc(t("Keep this project's decisions, conventions, fixes and open tasks in .memoria/brain.md in the repo. Teammates using Memoria get them automatically; review changes in pull requests. Secrets are redacted."))}</div>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px">
+              <button class="btn" id="pdBrain">${d.brain && d.brain.export ? t("Stop sharing") : t("Share in repo")}</button>
+              <span class="muted" style="font-size:12px">${d.brain && d.brain.exists ? esc(t("{0} entries in .memoria/brain.md", d.brain.entries)) : ""}</span>
+            </div>
+          </div>` : ""}
         </div>
       </div>`;
+    document.getElementById("pdBrain")?.addEventListener("click", async () => {
+      try {
+        const on = !(d.brain && d.brain.export);
+        const r = await api("/api/projects/brain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, export: on }) });
+        toast(on ? t("Shared: {0} entries written to {1}", r.entries, r.file) : t("Sharing stopped. The file stays in the repo until you delete it."));
+        renderProjectDetail(slug);
+      } catch (e) {
+        toast(t("Failed: ") + e.message, "err");
+      }
+    });
     // aksi
     const goTimeline = () => { setView("timeline"); const sel = $("#tlProject"); if (sel) sel.value = slug; tlMode = "text"; renderTimeline(); };
     const goTasks = () => { setView("tasks"); const sel = $("#tkProject"); if (sel) sel.value = slug; renderTasks(); };

@@ -50,6 +50,11 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Team project brain
+- **`.memoria/brain.md`:** opt-in per project (project detail card or `memoria brain on|off <project>`). Current decisions, conventions, known fixes and open tasks are written to a markdown file in the repo, one line per memory with a `<!-- m:<uid> -->` marker; drafts and superseded decisions are left out and secrets are redacted again on export. Output order is stable so diffs stay small.
+- **Import:** teammates' lines become memories with origin `team`; edits made in review update the matching memory, and lines removed from the file archive only team memories created by the import, never local ones. Runs in background housekeeping and via `memoria brain import`. `POST /api/projects/brain`.
+- **Fix:** the per-process project id cache is cleared on `closeDb()`, so reopening another database no longer reuses ids from the previous one.
+
 ### Tier 0
 - **Stale tasks:** open tasks older than `staleTaskDays` (default 30) that no later message mentions are archived daily as an undoable batch, so "Open tasks" in the resume block stays about current work (`archiveStaleTasks`, toggle `archiveStaleTasks`). Undo restores them as active.
 - **Inbox cap per project** (`draftCapPerProject`, default 50): uncertain drafts beyond the cap are archived lowest score first.

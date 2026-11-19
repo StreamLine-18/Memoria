@@ -114,6 +114,7 @@ flowchart TB
 | 🕸️ **Memory graph** | True 3D force graph (2D fallbacks), degree-priority labels with anti-overlap, hover focus on neighbors, zoom & pan |
 | 📋 **Tasks & timeline** | Per-project activity + git history + weekly digest |
 | 🔎 **Global palette** | Search & copy memories from anywhere; quick-note hotkey |
+| 👥 **Team project brain** | Opt-in `.memoria/brain.md` in the repo: decisions, conventions and fixes shared through git, reviewable in PRs, imported back as team memories |
 | 🔐 **Encrypted sync (optional)** | E2E encrypted `.memsync` bundles across your devices — manual or shared folder (Dropbox/iCloud/Syncthing/network), no server, no embeddings/secrets/transcripts |
 | 🔔 **Webhooks & notifications** | Opt-in alerts to Discord, Telegram, or generic JSON webhooks (digest, scan, approvals, pending drafts) |
 | 🌐 **EN / ID interface** | English-first, Bahasa Indonesia one click away |

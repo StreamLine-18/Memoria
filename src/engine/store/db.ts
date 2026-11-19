@@ -709,6 +709,8 @@ export function closeDb(): void {
     }
     db = null;
   }
+  // Project ids are per-database; a memo from a closed handle would be stale.
+  ensureProjectMemo.clear();
 }
 
 /* ---------- Sync primitives M1 (HLC + outbox) ----------

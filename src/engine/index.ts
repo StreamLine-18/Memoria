@@ -201,6 +201,32 @@ async function main(): Promise<void> {
       console.log(`Extracted ${n} memory candidates; triage: ${tr.promoted} active, ${tr.archived} archived, ${tr.kept} left for review`);
       break;
     }
+    case "brain": {
+      // memoria brain <export|import|on|off> [project path or name; default: cwd]
+      ensureDb();
+      const sub = process.argv[3] || "";
+      const target = process.argv[4] || process.cwd();
+      const { resolveProject } = await import("./store/db");
+      const proj = resolveProject(target);
+      if (!["export", "import", "on", "off"].includes(sub) || !proj) {
+        console.log("Usage: memoria brain <export|import|on|off> [project]   (writes/reads .memoria/brain.md in the repo)");
+        process.exit(1);
+      }
+      const brain = await import("./team/brain");
+      if (sub === "on" || sub === "off") {
+        brain.setBrainExport(proj.slug, sub === "on");
+        console.log(`Brain export ${sub === "on" ? "enabled" : "disabled"} for ${proj.slug}`);
+        if (sub === "off") break;
+      }
+      if (sub === "import") {
+        const r = brain.importBrain(proj.slug);
+        console.log(r ? `Imported ${r.file}: ${r.added} added, ${r.updated} updated, ${r.archived} archived, ${r.unchanged} unchanged` : "No .memoria/brain.md in this project");
+        break;
+      }
+      const r = brain.exportBrain(proj.slug);
+      console.log(`${r.changed ? "Wrote" : "Up to date:"} ${r.file} (${r.entries} entries)`);
+      break;
+    }
     case "obsidian": {
       // memoria obsidian sync <dir>
       ensureDb();
@@ -243,6 +269,7 @@ Usage: memoria <command>
   token                  Print the dashboard sign-in link and the API token
   import <export.zip>    Import a ChatGPT or Claude data export
   obsidian sync <dir>    Two-way sync with a Markdown / Obsidian folder
+  brain <export|import|on|off> [project]  Team project brain in .memoria/brain.md
   hooks <install|remove|status>  Claude Code native hooks
   integrate <tool>       Register Memoria in an AI tool's MCP config
   handoff <slug>         Print the resume block for a project

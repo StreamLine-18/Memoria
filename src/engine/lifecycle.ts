@@ -58,6 +58,16 @@ async function runHousekeepingSoon(): Promise<void> {
       /* antrean dicoba lagi pada siklus berikutnya */
     }
     try {
+      const { syncBrains } = await import("./team/brain");
+      const b = syncBrains();
+      if (b.imported || b.exported) {
+        console.log(`[memoria] Project brains: ${b.imported} imported, ${b.exported} exported`);
+        if (b.imported) emitEvent("memory", { brain: true });
+      }
+    } catch {
+      /* retried next cycle */
+    }
+    try {
       const { syncConfiguredVault } = await import("./export/obsidian");
       const v = syncConfiguredVault();
       if (v && (v.updatedFromNotes || v.createdFromNotes || v.archivedFromNotes)) {

@@ -91,7 +91,7 @@ function clamp(value: number, min: number, max: number): number {
 
 const MEMORY_KINDS = new Set(["fact", "decision", "task_done", "task_pending", "error_fixed", "preference", "context"]);
 const MEMORY_STATUS = new Set(["active", "draft"]);
-const MEMORY_ORIGINS = new Set(["llm", "heuristic", "user"]);
+const MEMORY_ORIGINS = new Set(["llm", "heuristic", "user", "team"]);
 
 function validateProject(value: unknown): ProjectPayload {
   const p = record(value, "Project");
