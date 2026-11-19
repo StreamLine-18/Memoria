@@ -24,7 +24,7 @@ Tanpa cloud. Tanpa akun. Tidak ada data yang keluar dari komputer Anda.
 [![License](https://img.shields.io/github/license/xinzzu/Memoria)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/xinzzu/badge.svg)](https://hub.xerj.org/contributors/xinzzu)
 
-[English](README.md) · **Bahasa Indonesia**
+[English](README.md) · **Bahasa Indonesia** · [हिन्दी](README.hi.md)
 
 ```bash
 npx @xinzzu/memoria@latest server   # lalu buka http://127.0.0.1:48210
