@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.xinzzu/memoria",
+  "title": "Memoria",
+  "description": "Local-first memory for AI coding tools: recall decisions, tasks and fixes across sessions.",
+  "version": "0.15.0",
+  "repository": {
+    "url": "https://github.com/xinzzu/Memoria",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/xinzzu/Memoria#readme",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@xinzzu/memoria",
+      "version": "0.15.0",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }]
+    }
+  ]
+}
