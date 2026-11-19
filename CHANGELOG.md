@@ -50,6 +50,10 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-11-19 — Team Brain
+
+**Share what your project has learned through git.** An opt-in `.memoria/brain.md` carries decisions, conventions and known fixes to teammates and is reviewed like any other file. Tier 0 triage gets stale-task cleanup, an inbox cap and "always archive" patterns, and Memoria is now listed for the official MCP Registry.
+
 ### Discoverability
 - README hero: one-line `npx` start and a demo GIF (`docs/img/demo.gif`); social preview image in `docs/img/social-preview.png`.
 - npm metadata: English description and broader keywords; `mcpName` plus `server.json` for the official MCP Registry (`io.github.xinzzu/memoria`, stdio via `memoria mcp`).
