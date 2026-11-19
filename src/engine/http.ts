@@ -609,6 +609,7 @@ export function startHttpServer(): Promise<void> {
             notifyDraftMin: getSetting("notifyDraftMin", "3"),
             notifyTelegramChat: getSetting("notifyTelegramChat", ""),
             captureExclude: getSetting("captureExclude", ""),
+            obsidianVault: getSetting("obsidianVault", ""),
             notifyDiscordHas: getSetting("notifyDiscordUrl", "") ? "1" : "0",
             notifyTelegramHas: getSetting("notifyTelegramToken", "") ? "1" : "0",
             notifyGenericHas: getSetting("notifyGenericUrl", "") ? "1" : "0",
@@ -831,7 +832,54 @@ export function startHttpServer(): Promise<void> {
       } else if (url.pathname === "/api/digest/generate" && req.method === "POST") {
         const { generateWeeklyDigest } = await import("./summary/weekly");
         sendJson(res, 200, generateWeeklyDigest());
-      } else if (url.pathname === "/api/export/obsidian" && req.method === "POST") {        const body = await readBody(req);
+      } else if (url.pathname === "/api/import/chats" && req.method === "POST") {
+        // Raw upload of a ChatGPT / Claude export (.zip or conversations.json),
+        // streamed to a temp file: exports are often far above MAX_BODY_BYTES.
+        const os = await import("node:os");
+        const p = await import("node:path");
+        const tmp = p.join(fs.mkdtempSync(p.join(os.tmpdir(), "memoria-chat-")), "export.bin");
+        const LIMIT = 1024 * 1024 * 1024;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const out = fs.createWriteStream(tmp, { mode: 0o600 });
+            let size = 0;
+            req.on("data", (c: Buffer) => {
+              size += c.length;
+              if (size > LIMIT) {
+                req.destroy();
+                out.destroy();
+                reject(new Error("export larger than 1 GB"));
+              }
+            });
+            req.pipe(out);
+            out.on("finish", () => resolve());
+            out.on("error", reject);
+            req.on("error", reject);
+          });
+          const { importChatExport } = await import("./import/chats");
+          const r = importChatExport(tmp);
+          emitEvent("scan", { tools: [r.source], newTranscripts: r.messages });
+          void extractQueue(true).catch(() => {});
+          sendJson(res, 200, { ok: true, ...r });
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        } finally {
+          fs.rmSync(p.dirname(tmp), { recursive: true, force: true });
+        }
+      } else if (url.pathname === "/api/obsidian/sync" && req.method === "POST") {
+        const body = await readBody(req);
+        const dir = String(body.dir || getSetting("obsidianVault", "")).trim();
+        if (!dir) {
+          sendJson(res, 400, { error: "dir is required" });
+          return;
+        }
+        setSetting("obsidianVault", dir);
+        const { syncObsidianVault } = await import("./export/obsidian");
+        const r = syncObsidianVault(dir);
+        if (r.updatedFromNotes || r.createdFromNotes || r.archivedFromNotes) emitEvent("memory", { obsidian: true });
+        sendJson(res, 200, r);
+      } else if (url.pathname === "/api/export/obsidian" && req.method === "POST") {
+        const body = await readBody(req);
         const cfg = getConfig();
         const target = String(body.dir || "") || require("node:path").join(cfg.dataDir, "obsidian-export");
         const { exportObsidianVault } = await import("./export/obsidian");

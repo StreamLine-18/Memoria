@@ -178,6 +178,46 @@ async function main(): Promise<void> {
       }
       break;
     }
+    case "import": {
+      // memoria import <chatgpt-or-claude-export.zip | conversations.json>
+      ensureDb();
+      const file = process.argv[3];
+      if (!file) {
+        console.log("Usage: memoria import <export.zip | conversations.json>   (ChatGPT or Claude data export)");
+        process.exit(1);
+      }
+      const { importChatExport } = await import("./import/chats");
+      const r = importChatExport(file);
+      console.log(`Imported ${r.conversations} ${r.source} conversations (${r.messages} messages, ${r.skipped} empty skipped)`);
+      const { extractQueue } = await import("./extract/extractor");
+      let n = 0;
+      for (let i = 0; i < 200; i++) {
+        const k = await extractQueue(true, { order: "desc" });
+        if (!k) break;
+        n += k;
+      }
+      const { runTriage } = await import("./extract/triage");
+      const tr = runTriage();
+      console.log(`Extracted ${n} memory candidates; triage: ${tr.promoted} active, ${tr.archived} archived, ${tr.kept} left for review`);
+      break;
+    }
+    case "obsidian": {
+      // memoria obsidian sync <dir>
+      ensureDb();
+      const dir = process.argv[4] || (await import("./store/db")).getSetting("obsidianVault", "");
+      if (process.argv[3] !== "sync" || !dir) {
+        console.log("Usage: memoria obsidian sync <vault-folder>");
+        process.exit(1);
+      }
+      const { syncObsidianVault } = await import("./export/obsidian");
+      const r = syncObsidianVault(dir);
+      if (!r.ok) {
+        console.error(r.error);
+        process.exit(1);
+      }
+      console.log(`Synced ${r.notes} notes in ${r.dir}: ${r.written} written, ${r.updatedFromNotes} updated from notes, ${r.createdFromNotes} new, ${r.archivedFromNotes} archived, ${r.conflicts} conflicts`);
+      break;
+    }
     case "token": {
       // Print the local API token and the one-time dashboard sign-in link.
       ensureDb();
@@ -201,6 +241,9 @@ Usage: memoria <command>
   recall "keywords"      Search memories
   status                 Counts per tool
   token                  Print the dashboard sign-in link and the API token
+  import <export.zip>    Import a ChatGPT or Claude data export
+  obsidian sync <dir>    Two-way sync with a Markdown / Obsidian folder
+  hooks <install|remove|status>  Claude Code native hooks
   integrate <tool>       Register Memoria in an AI tool's MCP config
   handoff <slug>         Print the resume block for a project
   maintain triage        Preview Tier 0 auto-triage (--apply, --undo)
