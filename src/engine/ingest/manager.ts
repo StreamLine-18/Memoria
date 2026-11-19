@@ -9,6 +9,7 @@ import { scanCopilot } from "./copilot";
 import { scanAntigravity } from "./antigravity";
 import { scanAntigravityBrain } from "./antigravity-brain";
 import { scanVscdb } from "./vscdb";
+import { scanVscodeChatSessions, scanCursorComposer } from "./vscode-chat";
 import { extractQueue } from "../extract/extractor";
 import { emitEvent } from "../events";
 
@@ -95,6 +96,10 @@ export async function scanAll(log?: (msg: string) => void): Promise<ScanResult[]
             if (src.tool === "vscode" || src.tool === "cursor" || src.tool === "windsurf") {
               const r = scanVscdb(src.tool, src.paths);
               count += r.messages;
+              // paths = [globalStorage, workspaceStorage]
+              const [globalStorage, workspaceStorage] = src.paths;
+              count += scanVscodeChatSessions(workspaceStorage, src.tool);
+              if (src.tool === "cursor" || src.tool === "windsurf") count += scanCursorComposer(globalStorage, workspaceStorage, src.tool);
             }
             break;
           default:

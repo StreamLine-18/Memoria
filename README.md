@@ -103,7 +103,7 @@ flowchart TB
 
 | | |
 |---|---|
-| 🔄 **Capture from 9 tools** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, Windsurf on by default; VS Code and Cursor opt-in (Settings → Sources) |
+| 🔄 **Capture from 9 tools** | Claude Code, Codex, opencode, Gemini CLI, Copilot, Antigravity, VS Code (Copilot Chat), Cursor, Windsurf |
 | ⏸️ **Resume engine** | A SESSION RESUME block auto-injected into AGENTS.md / CLAUDE.md / GEMINI.md: open tasks, locked decisions, current branch, dirty files |
 | ⚡ **Pre-limit trigger** | The moment your AI tool reports a usage limit, Memoria captures a work snapshot (files, commands, git state) and injects the resume block **immediately** — before you're kicked out |
 | 🧩 **MCP bridge — one URL, every tool** | MCP over HTTP at `http://127.0.0.1:48210/mcp` + one-click registration into 12 clients (Claude Code/Desktop, Codex, Gemini, opencode, Copilot CLI, Antigravity, Cursor, Windsurf, VS Code, Cline, Zed) |

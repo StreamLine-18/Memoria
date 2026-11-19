@@ -50,6 +50,9 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Capture
+- **VS Code (Copilot Chat) and Cursor are captured by default.** New parser `ingest/vscode-chat.ts`: VS Code `workspaceStorage/<hash>/chatSessions/*.jsonl` operation logs are replayed the way VS Code does (initial / set / push / delete entries; edited requests truncate), legacy `.json` sessions are read, thinking parts are skipped, and tool invocations become tool rows. Cursor Composer conversations are read from `globalStorage/state.vscdb` (`cursorDiskKV`, inline `conversation` or `bubbleId:` entries). The project comes from each workspace's `workspace.json`. The generic ItemTable scan stays as a fallback.
+
 ## [0.14.0] — 2026-11-19 — Connected Everywhere
 
 **Setup in a minute, every tool connected, beyond coding.** A first-run assistant, native Claude Code hooks, Antigravity conversations, ChatGPT/Claude history import, and a two-way Obsidian vault — plus secrets encrypted and the local API token-protected in CLI/npm mode.
