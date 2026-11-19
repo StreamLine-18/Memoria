@@ -159,6 +159,74 @@ test("vscdb (Cursor/VS Code/Windsurf): tool-only messages tagged tool, tool call
   assertUniqueSeq(r);
 });
 
+test("VS Code chatSessions: mutation log replayed, legacy .json read, project from workspace.json", () => {
+  const { scanVscodeChatSessions, replayMutationLog } = require("../dist/engine/ingest/vscode-chat.js");
+  const ws = tmp("mem-vscode-ws-");
+  const repo = tmp("mem-vscode-repo-");
+  const dir = path.join(ws, "abc123");
+  fs.mkdirSync(path.join(dir, "chatSessions"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "workspace.json"), JSON.stringify({ folder: "file://" + repo }));
+  const req = (id, text, ts) => ({ requestId: id, message: { text, parts: [] }, variableData: { variables: [] }, response: [], timestamp: ts });
+  const log = [
+    { kind: 0, v: { version: 3, sessionId: "vs1", creationDate: 1795000000000, requests: [], responderUsername: "GitHub Copilot" } },
+    { kind: 2, k: ["requests"], v: [req("r1", "Should we use zod or yup for form validation?", 1795000001000)] },
+    { kind: 1, k: ["requests", 0, "response"], v: [
+      { kind: "thinking", value: "internal" },
+      { value: "Decided: zod instead of yup, because the types are inferred.", isTrusted: false },
+      { kind: "toolInvocationSerialized", pastTenseMessage: { value: "Read package.json" } },
+    ] },
+    { kind: 2, k: ["requests"], v: [req("r2", "Add a schema for the signup form", 1795000002000)] },
+    { kind: 2, k: ["requests"], i: 1, v: [req("r2b", "Add a zod schema for the signup form", 1795000003000)] },
+  ];
+  fs.writeFileSync(path.join(dir, "chatSessions", "vs1.jsonl"), log.map((l) => JSON.stringify(l)).join("\n") + "\n");
+  fs.writeFileSync(path.join(dir, "chatSessions", "old.json"), JSON.stringify({ sessionId: "vs-old", creationDate: 1794000000000, requests: [req("o1", "Rename the util module", 1794000001000)] }));
+
+  const state = replayMutationLog(fs.readFileSync(path.join(dir, "chatSessions", "vs1.jsonl"), "utf8").split("\n"));
+  assert.deepEqual(state.requests.map((r) => r.requestId), ["r1", "r2b"], "push with i truncates (edited request)");
+
+  assert.ok(scanVscodeChatSessions(ws, "vscode") >= 4);
+  const r = rows("vscode", "vs1");
+  assert.deepEqual(r.map((x) => x.role), ["user", "assistant", "tool", "user"]);
+  assert.equal(r[1].content, "Decided: zod instead of yup, because the types are inferred.", "thinking parts skipped");
+  assert.equal(r[2].content, "Read package.json");
+  assert.equal(rows("vscode", "vs-old").length, 1);
+  const proj = dbmod.getDb().prepare("SELECT p.path FROM transcripts t JOIN projects p ON p.id = t.project_id WHERE t.session_id = 'vs1' LIMIT 1").get();
+  assert.equal(proj.path, fs.realpathSync(repo));
+  assert.equal(scanVscodeChatSessions(ws, "vscode"), 0, "unchanged files are skipped");
+});
+
+test("Cursor composer: inline conversation and bubble-header formats, project from workspace", () => {
+  const { scanCursorComposer } = require("../dist/engine/ingest/vscode-chat.js");
+  const gs = tmp("mem-cursor-gs-");
+  const ws = tmp("mem-cursor-ws-");
+  const repo = tmp("mem-cursor-repo-");
+  const g = new DatabaseSync(path.join(gs, "state.vscdb"));
+  g.exec("CREATE TABLE ItemTable (key TEXT, value TEXT); CREATE TABLE cursorDiskKV (key TEXT, value BLOB)");
+  const kv = g.prepare("INSERT INTO cursorDiskKV VALUES (?, ?)");
+  kv.run("composerData:c-old", JSON.stringify({ composerId: "c-old", createdAt: 1795000000000, conversation: [
+    { type: 1, text: "Why is the build slow?" },
+    { type: 2, text: "The build was slow because source maps were on in production; disabled them." },
+  ] }));
+  kv.run("composerData:c-new", JSON.stringify({ composerId: "c-new", createdAt: 1795000100000, fullConversationHeadersOnly: [{ bubbleId: "b1", type: 1 }, { bubbleId: "b2", type: 2 }] }));
+  kv.run("bubbleId:c-new:b1", JSON.stringify({ type: 1, text: "Use pnpm workspaces for the monorepo?" }));
+  kv.run("bubbleId:c-new:b2", JSON.stringify({ type: 2, text: "Yes: decided on pnpm workspaces instead of Lerna." }));
+  g.close();
+  const wdir = path.join(ws, "h1");
+  fs.mkdirSync(wdir);
+  fs.writeFileSync(path.join(wdir, "workspace.json"), JSON.stringify({ folder: "file://" + repo }));
+  const w = new DatabaseSync(path.join(wdir, "state.vscdb"));
+  w.exec("CREATE TABLE ItemTable (key TEXT, value TEXT)");
+  w.prepare("INSERT INTO ItemTable VALUES ('composer.composerData', ?)").run(JSON.stringify({ allComposers: [{ composerId: "c-new" }] }));
+  w.close();
+
+  assert.equal(scanCursorComposer(gs, ws, "cursor"), 4);
+  assert.deepEqual(rows("cursor", "composer:c-old").map((x) => x.role), ["user", "assistant"]);
+  assert.equal(rows("cursor", "composer:c-new")[1].content, "Yes: decided on pnpm workspaces instead of Lerna.");
+  const proj = dbmod.getDb().prepare("SELECT p.path FROM transcripts t JOIN projects p ON p.id = t.project_id WHERE t.session_id = 'composer:c-new' LIMIT 1").get();
+  assert.equal(proj.path, fs.realpathSync(repo));
+  assert.equal(scanCursorComposer(gs, ws, "cursor"), 0, "unchanged database skipped");
+});
+
 test("antigravity brain: user request unwrapped, planner = assistant, tool steps = tool, SYSTEM skipped, project from paths", async () => {
   const root = tmp("mem-agy-");
   const repo = tmp("mem-agy-repo-");

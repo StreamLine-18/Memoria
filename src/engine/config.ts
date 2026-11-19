@@ -126,14 +126,14 @@ export function getConfig(): AppConfig {
       {
         tool: "vscode",
         label: "VS Code",
-        enabled: false,
+        enabled: true,
         kind: "vscdb",
         paths: [path.join(appdata, "Code", "User", "globalStorage"), path.join(appdata, "Code", "User", "workspaceStorage")],
       },
       {
         tool: "cursor",
         label: "Cursor",
-        enabled: false,
+        enabled: true,
         kind: "vscdb",
         paths: [path.join(appdata, "Cursor", "User", "globalStorage"), path.join(appdata, "Cursor", "User", "workspaceStorage")],
       },
