@@ -50,6 +50,9 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### MCP
+- Tool parameter descriptions are now all in English (some were in Indonesian), and `limit`, `importance` and `maxChars` gained descriptions, so agents in any language call the tools correctly.
+
 ## [0.16.0] — 2026-11-19 — Team Brain
 
 **Share what your project has learned through git.** An opt-in `.memoria/brain.md` carries decisions, conventions and known fixes to teammates and is reviewed like any other file. Tier 0 triage gets stale-task cleanup, an inbox cap and "always archive" patterns, and Memoria is now listed for the official MCP Registry.
