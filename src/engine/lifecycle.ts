@@ -82,11 +82,18 @@ async function runHousekeepingSoon(): Promise<void> {
 function autoTriage(): void {
   if (!getBoolSetting("autoTriage", true)) return;
   try {
-    const { runTriage } = require("./extract/triage") as typeof import("./extract/triage");
+    const { runTriage, archiveStaleTasks } = require("./extract/triage") as typeof import("./extract/triage");
     const r = runTriage();
     if (r.promoted || r.archived) {
       console.log(`[memoria] Auto-triage: ${r.promoted} promoted, ${r.archived} archived, ${r.kept} left for review`);
       emitEvent("memory", { triage: r.batch });
+    }
+    if (getBoolSetting("archiveStaleTasks", true)) {
+      const st = archiveStaleTasks();
+      if (st.archived) {
+        console.log(`[memoria] Stale tasks archived: ${st.archived} (not mentioned for a while; undo in Pending approval)`);
+        emitEvent("tasks", { stale: st.archived });
+      }
     }
   } catch (err) {
     console.warn("[memoria] auto-triage:", err instanceof Error ? err.message : err);

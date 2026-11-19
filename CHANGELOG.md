@@ -50,6 +50,14 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+### Tier 0
+- **Stale tasks:** open tasks older than `staleTaskDays` (default 30) that no later message mentions are archived daily as an undoable batch, so "Open tasks" in the resume block stays about current work (`archiveStaleTasks`, toggle `archiveStaleTasks`). Undo restores them as active.
+- **Inbox cap per project** (`draftCapPerProject`, default 50): uncertain drafts beyond the cap are archived lowest score first.
+- **"Always archive" patterns:** the inbox groups drafts that start with the same words; one click archives them and adds the text as a user noise pattern (plain substring, never a regex). Future candidates containing it are dropped at extraction. `GET/POST/DELETE /api/drafts/noise-patterns`.
+- **Keyboard review** in Pending approval: `j`/`k` move, `a` approve, `x` archive, space select.
+- **"Used" boost:** memories that agents fetched (`get_memory`, `file_context`, recall) rank slightly higher in project context.
+- Undo restores each memory's previous status (it always restored `draft`).
+
 ## [0.15.0] — 2026-11-19 — Editors & Trust
 
 **VS Code and Cursor captured out of the box, and sync you can revoke.** Copilot Chat sessions and Cursor Composer conversations are now read from where the editors actually store them, and Sync gains key rotation, device revocation, and a clock guard.
