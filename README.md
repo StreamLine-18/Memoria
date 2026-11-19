@@ -24,7 +24,7 @@ No cloud. No account. Nothing leaves your computer.
 [![License](https://img.shields.io/github/license/xinzzu/Memoria)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/xinzzu/badge.svg)](https://hub.xerj.org/contributors/xinzzu)
 
-**English** · [Bahasa Indonesia](README.id.md)
+**English** · [Bahasa Indonesia](README.id.md) · [हिन्दी](README.hi.md)
 
 ```bash
 npx @xinzzu/memoria@latest server   # then open http://127.0.0.1:48210
