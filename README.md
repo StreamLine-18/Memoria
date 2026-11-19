@@ -25,6 +25,14 @@ No cloud. No account. Nothing leaves your computer.
 
 **English** · [Bahasa Indonesia](README.id.md)
 
+```bash
+npx @xinzzu/memoria@latest server   # then open http://127.0.0.1:48210
+```
+
+<img src="docs/img/demo.gif" alt="Memoria demo: sessions become memories, then another tool recalls them over MCP" width="800">
+
+<sub>Capture in Claude Code, continue in Codex: the context comes with you. If Memoria saves you a re-explain, a star helps others find it.</sub>
+
 </div>
 
 ---

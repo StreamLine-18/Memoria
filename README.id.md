@@ -25,6 +25,14 @@ Tanpa cloud. Tanpa akun. Tidak ada data yang keluar dari komputer Anda.
 
 [English](README.md) · **Bahasa Indonesia**
 
+```bash
+npx @xinzzu/memoria@latest server   # lalu buka http://127.0.0.1:48210
+```
+
+<img src="docs/img/demo.gif" alt="Demo Memoria: sesi menjadi memori, lalu tool lain me-recall lewat MCP" width="800">
+
+<sub>Tangkap di Claude Code, lanjutkan di Codex: konteksnya ikut pindah. Kalau Memoria membantu, beri star supaya orang lain ikut menemukannya.</sub>
+
 </div>
 
 ---
