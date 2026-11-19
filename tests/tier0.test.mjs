@@ -204,6 +204,21 @@ test("ingest claude: tool_result disimpan sebagai role tool, tag IDE dibuang", a
   assert.equal(again, 3, "re-scan tidak boleh menggandakan pesan");
 });
 
+test("task lifecycle: a done-word about something else does not close a task", async () => {
+  const { isTaskDone } = require("../dist/engine/extract/tasklife.js");
+  const t0 = 1000;
+  const rows = [
+    { role: "assistant", ts: t0, content: "TODO: tambahkan migrasi untuk tabel orders dan index pada created_at." },
+    { role: "user", ts: t0 + 1, content: "Error ECONNREFUSED ternyata karena DATABASE_URL belum di-set, fixed dengan menambah .env.local." },
+    { role: "assistant", ts: t0 + 2, content: "- [ ] Tambah rate limit di POST /api/orders\n- [x] Setup Neon branch preview-main" },
+  ];
+  assert.equal(isTaskDone("TODO: tambahkan migrasi untuk tabel orders dan index pada created_at.", t0, rows), false);
+  assert.equal(isTaskDone("Tambah rate limit di POST /api/orders", t0 + 2, rows), false, "its own unchecked line is not evidence");
+  assert.equal(isTaskDone("Setup Neon branch preview-main", t0, rows), true, "a checked checkbox for the same item closes it");
+  rows.push({ role: "assistant", ts: t0 + 3, content: "Rate limit di POST /api/orders sudah selesai dan dites." });
+  assert.equal(isTaskDone("Tambah rate limit di POST /api/orders", t0 + 2, rows), true);
+});
+
 test("seqAllocator: setiap pesan satu sesi mendapat seq unik (dulu semua sama → pesan hilang)", () => {
   const next = dbmod.seqAllocator("seqtest");
   const seqs = [next("s"), next("s"), next("s"), next("t"), next("s")];

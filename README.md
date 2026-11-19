@@ -158,6 +158,10 @@ memoria help                             # all commands
 
 ### 2 · First run — no model required
 
+On first launch a setup assistant lists the AI tools found on your machine, connects the ones
+you pick, imports their past sessions, and shows what Memoria now remembers about your recent
+projects — usually within a minute.
+
 Out of the box, Memoria runs on **Tier 0 heuristics**: sessions are captured and turned into
 memories. Noise (tool output, shell listings, bare paths) and duplicates are archived
 automatically, strong signals become active, and the few uncertain drafts are re-checked daily —

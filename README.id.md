@@ -158,6 +158,10 @@ Memoria berjalan di tray dan langsung mulai menangkap.
 
 ### 2 · Jalan pertama — tanpa model
 
+Saat pertama dibuka, asisten setup menampilkan AI tools yang ditemukan di komputermu,
+menghubungkan yang kamu pilih, mengimpor sesi lamanya, lalu menunjukkan apa yang kini Memoria
+ingat tentang proyek terbarumu — biasanya dalam satu menit.
+
 Secara bawaan Memoria memakai **Tier 0 heuristik**: sesi ditangkap dan menjadi kandidat memori.
 Noise (output tool, listing shell, path lepas) dan duplikat diarsipkan otomatis, sinyal kuat
 langsung aktif, dan sedikit draft yang ragu dinilai ulang setiap hari — Anda tidak perlu
