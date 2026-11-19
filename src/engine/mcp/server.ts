@@ -72,10 +72,10 @@ export function createMcpServer(): Server {
         inputSchema: {
           type: "object",
           properties: {
-            query: { type: "string", description: "Pertanyaan atau kata kunci" },
-            limit: { type: "number", default: 8 },
-            project: { type: "string", description: "Opsional — batasi ke satu proyek (path/nama)" },
-            maxChars: { type: "number", description: "Opsional — potong hasil pada N karakter (budget context window)" },
+            query: { type: "string", description: "Question or keywords, e.g. \"why did the build fail\"" },
+            limit: { type: "number", default: 8, description: "Maximum number of results" },
+            project: { type: "string", description: "Optional — limit to one project (path or name)" },
+            maxChars: { type: "number", description: "Optional — cut the result at N characters to fit the context window" },
             mode: { type: "string", enum: ["full", "index"], default: "full", description: "\"index\" = one line per hit with id; fetch details with get_memory" },
           },
           required: ["query"],
@@ -89,8 +89,8 @@ export function createMcpServer(): Server {
           type: "object",
           properties: {
             project: { type: "string", description: "Project path or name" },
-            limit: { type: "number", default: 10 },
-            mode: { type: "string", enum: ["index", "full"], default: "index" },
+            limit: { type: "number", default: 10, description: "Maximum number of memories" },
+            mode: { type: "string", enum: ["index", "full"], default: "index", description: "\"index\" = one line per memory with id; \"full\" = complete text" },
           },
           required: ["project"],
         },
@@ -104,7 +104,7 @@ export function createMcpServer(): Server {
           properties: {
             path: { type: "string", description: "File path, e.g. src/engine/http.ts" },
             project: { type: "string", description: "Optional — limit to one project (path or name)" },
-            limit: { type: "number", default: 8 },
+            limit: { type: "number", default: 8, description: "Maximum number of results" },
           },
           required: ["path"],
         },
@@ -129,10 +129,11 @@ export function createMcpServer(): Server {
             kind: {
               type: "string",
               enum: ["fact", "decision", "task_done", "task_pending", "error_fixed", "preference", "context"],
+              description: "Memory type: decision, fact, preference, open task (task_pending), finished task (task_done), fixed error (error_fixed) or general context",
             },
             content: { type: "string", description: "Memory content, short and dense" },
-            project: { type: "string", description: "Path proyek (opsional)" },
-            importance: { type: "number", default: 0.5 },
+            project: { type: "string", description: "Optional — project path or name; omit for a global memory" },
+            importance: { type: "number", default: 0.5, description: "0 to 1; higher ranks first in context" },
           },
           required: ["kind", "content"],
         },
@@ -144,8 +145,8 @@ export function createMcpServer(): Server {
         inputSchema: {
           type: "object",
           properties: {
-            id: { type: "number", description: "ID memori hasil recall" },
-            query: { type: "string", description: "Atau kata kunci untuk menemukan memori terdekat lalu ambil yang terhubung" },
+            id: { type: "number", description: "Memory id from recall or project_context" },
+            query: { type: "string", description: "Or keywords: the closest memory is found first, then its connections are returned" },
           },
         },
       },
@@ -161,8 +162,9 @@ export function createMcpServer(): Server {
             kind: {
               type: "string",
               enum: ["fact", "decision", "task_done", "task_pending", "error_fixed", "preference", "context"],
+              description: "Memory type: decision, fact, preference, open task (task_pending), finished task (task_done), fixed error (error_fixed) or general context",
             },
-            importance: { type: "number" },
+            importance: { type: "number", description: "New importance, 0 to 1" },
           },
           required: ["id"],
         },
@@ -186,9 +188,9 @@ export function createMcpServer(): Server {
         inputSchema: {
           type: "object",
           properties: {
-            project: { type: "string", description: "Path atau nama proyek" },
-            query: { type: "string", description: "Fokus opsional — memori yang cocok ditambahkan ke blok" },
-            maxChars: { type: "number", default: 6000 },
+            project: { type: "string", description: "Project path or name" },
+            query: { type: "string", description: "Optional focus — matching memories are added to the block" },
+            maxChars: { type: "number", default: 6000, description: "Upper bound on the block size in characters" },
           },
           required: ["project"],
         },
