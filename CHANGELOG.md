@@ -50,6 +50,12 @@ seluruh temuan high/medium penting diperbaiki di rilis ini.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-11-19 — Connected Everywhere
+
+**Setup in a minute, every tool connected, beyond coding.** A first-run assistant, native Claude Code hooks, Antigravity conversations, ChatGPT/Claude history import, and a two-way Obsidian vault — plus secrets encrypted and the local API token-protected in CLI/npm mode.
+
+> Upgrade notes: browser users of `memoria server` open the printed sign-in link once (`memoria token` prints it again). Scripts calling the local API need the `x-memoria-token` header. Existing Cursor / VS Code HTTP MCP entries get the header automatically.
+
 ### Beyond coding tools
 - **Import ChatGPT and Claude history** (`import/chats.ts`): the `.zip` (or `conversations.json`) from ChatGPT or Claude data export. ChatGPT's conversation tree is followed from `current_node`, so regenerated branches and system prompts are skipped. Each conversation becomes a session (tools `chatgpt` / `claude-ai`) that Tier 0 extracts and triages like any other. Re-importing adds nothing. Dashboard: Settings → Backup & transfer; CLI: `memoria import <file>`; API: `POST /api/import/chats` (raw upload, up to 1 GB, streamed to a temp file). Dependency-free zip reader (`import/zip.ts`).
 - **Obsidian vault, two-way** (`export/obsidian.ts`): memories live as Markdown notes with a stable `memoria_id` in frontmatter, one folder per project. Edit a note in Obsidian → the memory is updated (body, `kind`, `importance`); delete a note → the memory is archived; write a new note → a new memory, with its id written back. Changes in Memoria rewrite the note. `.memoria-sync.json` tracks the last synced state; when both sides changed, the note wins and the conflict is counted. Syncs every 5 minutes once Settings → Obsidian vault is set, or `memoria obsidian sync <dir>`. Notes from the old one-way export are replaced instead of duplicated. Frontmatter keys are now English.
