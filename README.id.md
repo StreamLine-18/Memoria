@@ -23,6 +23,9 @@ Tanpa cloud. Tanpa akun. Tidak ada data yang keluar dari komputer Anda.
 [![Build](https://github.com/xinzzu/Memoria/actions/workflows/build.yml/badge.svg?label=Build)](https://github.com/xinzzu/Memoria/actions)
 [![License](https://img.shields.io/github/license/xinzzu/Memoria)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/xinzzu/badge.svg)](https://hub.xerj.org/contributors/xinzzu)
+[![npm](https://img.shields.io/npm/v/@xinzzu/memoria?label=npm)](https://www.npmjs.com/package/@xinzzu/memoria)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.xinzzu%2Fmemoria-6e8dff)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xinzzu/memoria)
+[![xinzzu/Memoria MCP server](https://glama.ai/mcp/servers/xinzzu/Memoria/badges/score.svg)](https://glama.ai/mcp/servers/xinzzu/Memoria)
 
 [English](README.md) · **Bahasa Indonesia** · [हिन्दी](README.hi.md)
 
@@ -78,7 +81,7 @@ flowchart TB
   end
 
   subgraph O["5. Konsumen & output"]
-    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 klien · 7 tools"]
+    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 klien · 9 tools"]
     CTX["Injeksi konteks<br/>AGENTS.md · CLAUDE.md · GEMINI.md"]
     UI["Dashboard<br/>Electron tray · 9 view"]
     NT["Webhook / notifikasi<br/>Discord · Telegram · generik"]
@@ -193,7 +196,8 @@ Lebih suka LM Studio / llama.cpp / endpoint cloud? Settings → **Engine**.
 Buka tab **Integrations** → registrasi satu klik per tool, atau via CLI:
 
 ```bash
-node dist/engine/index.js integrate claude
+npm install -g @xinzzu/memoria && memoria integrate claude
+# dari checkout source: node dist/engine/index.js integrate claude
 node dist/engine/index.js scan
 ```
 
@@ -201,6 +205,14 @@ node dist/engine/index.js scan
 Codex CLI, opencode, Gemini CLI, Copilot CLI, Antigravity, **Cursor** (via HTTP bridge),
 **Windsurf**, **VS Code** (`"type": "http"`), **Cline**, **Zed**. Semua registrasi MERGE ke
 config yang sudah ada — tidak ada yang ditimpa.
+
+**Klien MCP stdio apa pun** bisa menjalankannya langsung dari npm (config yang sama dengan yang dipakai direktori MCP):
+
+```json
+{ "mcpServers": { "memoria": { "command": "npx", "args": ["-y", "@xinzzu/memoria", "mcp"] } } }
+```
+
+Memoria terdaftar di [MCP Registry resmi](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xinzzu/memoria) sebagai `io.github.xinzzu/memoria` dan di [Glama](https://glama.ai/mcp/servers/xinzzu/Memoria).
 
 Mau tanpa edit config? Semua klien MCP-capable bisa langsung menunjuk HTTP bridge:
 
@@ -357,7 +369,7 @@ src/
 │   ├── retrieve/contextblock.ts # build_context — blok konteks siap-tempel
 │   ├── sync/                  # sync E2E terenkripsi (kunci, bundle, export/apply,
 │   │                          # transport folder bersama, CLI, embed backfill)
-│   ├── mcp/server.ts          # MCP server (stdio + HTTP bridge, 7 tool)
+│   ├── mcp/server.ts          # MCP server (stdio + HTTP bridge, 9 tools)
 │   ├── store/                 # SQLite (node:sqlite), migrasi v1-v7, backup, secure storage
 │   ├── extract/snapshot.ts    # F4 snapshot kerja zero-AI + trigger pre-limit
 │   ├── extract/consolidate.ts # konsolidasi near-duplicate harian (zero-LLM)

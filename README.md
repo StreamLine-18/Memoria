@@ -23,6 +23,9 @@ No cloud. No account. Nothing leaves your computer.
 [![Build](https://github.com/xinzzu/Memoria/actions/workflows/build.yml/badge.svg?label=Build)](https://github.com/xinzzu/Memoria/actions)
 [![License](https://img.shields.io/github/license/xinzzu/Memoria)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/xinzzu/badge.svg)](https://hub.xerj.org/contributors/xinzzu)
+[![npm](https://img.shields.io/npm/v/@xinzzu/memoria?label=npm)](https://www.npmjs.com/package/@xinzzu/memoria)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.xinzzu%2Fmemoria-6e8dff)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xinzzu/memoria)
+[![xinzzu/Memoria MCP server](https://glama.ai/mcp/servers/xinzzu/Memoria/badges/score.svg)](https://glama.ai/mcp/servers/xinzzu/Memoria)
 
 **English** · [Bahasa Indonesia](README.id.md) · [हिन्दी](README.hi.md)
 
@@ -78,7 +81,7 @@ flowchart TB
   end
 
   subgraph O["5. Consumers & outputs"]
-    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 clients · 7 tools"]
+    MCP["MCP server<br/>stdio + HTTP /mcp<br/>12 clients · 9 tools"]
     CTX["Context injection<br/>AGENTS.md · CLAUDE.md · GEMINI.md"]
     UI["Dashboard<br/>Electron tray · 9 views"]
     NT["Webhooks / notifications<br/>Discord · Telegram · generic"]
@@ -195,7 +198,8 @@ Settings → **Engine**.
 Open the **Integrations** tab → one-click registration per tool, or via CLI:
 
 ```bash
-node dist/engine/index.js integrate claude
+npm install -g @xinzzu/memoria && memoria integrate claude
+# from a source checkout: node dist/engine/index.js integrate claude
 ```
 
 **12 supported targets** (config paths per the official MCP clients docs):
@@ -206,6 +210,14 @@ via the HTTP bridge), **Windsurf** (`~/.codeium/windsurf/mcp_config.json`),
 **VS Code** (`~/.vscode/mcp.json`, `"type": "http"`), **Cline** (globalStorage
 settings), **Zed** (`settings.json`). All registrations merge into your existing
 configs — nothing is overwritten.
+
+**Any stdio MCP client** can run it straight from npm (the same config the MCP directories use):
+
+```json
+{ "mcpServers": { "memoria": { "command": "npx", "args": ["-y", "@xinzzu/memoria", "mcp"] } } }
+```
+
+Memoria is listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xinzzu/memoria) as `io.github.xinzzu/memoria` and on [Glama](https://glama.ai/mcp/servers/xinzzu/Memoria).
 
 Prefer zero config? Any MCP-capable tool can also point straight at the HTTP bridge:
 
@@ -392,7 +404,7 @@ src/
 │   ├── retrieve/contextblock.ts # build_context — one ready-to-paste context block
 │   ├── sync/                  # E2E encrypted sync (keys, bundles, export/apply,
 │   │                          # shared-folder transport, CLI, embed backfill)
-│   ├── mcp/server.ts          # MCP server (stdio + HTTP bridge, 7 tools)
+│   ├── mcp/server.ts          # MCP server (stdio + HTTP bridge, 9 tools)
 │   ├── store/                 # SQLite (node:sqlite), migrations v1-v7, backup, secure storage
 │   ├── extract/snapshot.ts    # F4 zero-AI work snapshots + pre-limit trigger
 │   ├── extract/consolidate.ts # daily near-duplicate merging (zero-LLM)
